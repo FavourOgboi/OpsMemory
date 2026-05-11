@@ -104,9 +104,135 @@ mission-control/
 ├── opsmemory-backend/      # Backend Python codebase (FastAPI)
 │   ├── app/
 │   │   ├── routers/        # API Endpoints (webhooks, analytics, voice, chat, etc.)
+│   │   ├── services/       # Business logic (agents, RAG, campaign management)
 │   │   └── jobs/           # Background scheduler (APScheduler)
+│   ├── migrations/         # Database migrations (SQL)
 │   ├── requirements.txt    # Python dependencies
 │   └── main.py             # FastAPI entry point
 ├── package.json            # Frontend Node dependencies
 └── vite.config.ts          # Vite configuration
 ```
+
+---
+
+## 🤖 Fully Agentic AI System
+
+OpsMemory doesn't just detect situations — it actively manages them across multi-step campaigns.
+
+### Multi-Step Agent Campaigns
+
+Each agent can run autonomous, multi-step campaigns:
+
+1. **Agent evaluates** customer data and proposes an action
+2. **Human approves** the action (business approval in the dashboard)
+3. **Agent executes** and then **watches the outcomes**
+4. **Agent decides the next step** without waiting for human input
+5. **Agent escalates to CEO** only when genuine human judgment is needed
+
+### Collections Agent Campaign Example
+
+**Step 1 (Initial Detection):**
+- Customer has ₦500,000 outstanding for 5 days
+- Collections Agent proposes: Send gentle payment reminder
+- Reminder sent → Campaign created
+
+**Step 2 (Waiting & Checking - 48 hours later):**
+- Scheduler checks: Did payment arrive?
+- If YES → Campaign closes successfully
+- If NO → Agent sends FIRMER follow-up, still no excuse for payment
+
+**Step 3 (Final Check - 48 hours later):**
+- Still no payment?
+- Agent escalates to CEO with full context:
+  - Customer's lifetime value
+  - Payment history
+  - Conversation record
+  - Recommended next action (personal call, write-off, etc.)
+
+**CEO sees escalation** with data-backed recommendation, not just a notification.
+
+### Campaign Persistence (`agent_campaigns` table)
+
+All campaigns are tracked in the database:
+- `status`: active, goal_achieved, escalated, abandoned
+- `current_step`: Which step of the multi-step process
+- `context`: JSONB storing all state the agent needs to remember
+- `next_check_at`: When the scheduler should re-evaluate
+- Campaign log table tracks every decision for full audit trail
+
+### Scheduler Integration
+
+Three background jobs run continuously:
+1. **Morning digest** (7am) — CEO summary email
+2. **Agent sweep** (every 30 min) — Detect new situations
+3. **Campaign continuations** (every 4 hours) — Continue active campaigns
+
+---
+
+## 🔍 Knowledge Base & RAG Integration
+
+Agents now have access to business knowledge:
+- Product catalog with pricing and SKUs
+- FAQ entries
+- Business policies (delivery, payments, returns)
+- Uploaded documents (PDFs, TXT, Markdown)
+
+When a customer asks about a product, the agent:
+1. Searches the knowledge base using semantic similarity
+2. Retrieves relevant product info + pricing
+3. Injects into LLM context
+4. Responds with accurate, contextual information
+
+Knowledge stored in Supabase with pgvector embeddings (OpenAI text-embedding-3-small).
+
+---
+
+## 🔐 Security & Multi-Tenancy
+
+- **Business Isolation:** Every query scoped by `business_id`. One business cannot access another's data.
+- **Role-Based Access:** CEO sees all data. Sales reps see only assigned customers. Finance sees payments only.
+- **Webhook Verification:** HMAC-SHA256 signature verification for all incoming webhooks.
+- **JWT Authentication:** Clerk integration for secure session management.
+
+---
+
+## 📊 Real-Time Event Stream
+
+Live event types:
+- Payment confirmations
+- Agent triggers and escalations
+- Customer order updates
+- System health alerts
+
+All events streamed to the dashboard in real-time via server-sent events or websockets.
+
+---
+
+## 🛠 Development
+
+### Running Tests
+
+```bash
+cd opsmemory-backend
+pytest tests/
+
+# Or run specific test file
+pytest tests/test_agents.py -v
+```
+
+### Deploying Changes
+
+The system is designed to deploy on:
+- **Frontend:** Vercel, Netlify, or standard web hosting
+- **Backend:** AWS Lambda, Railway, Vercel Functions, or self-hosted VPS
+- **Database:** Supabase (managed) or self-hosted PostgreSQL with pgvector
+
+---
+
+## 📝 License
+
+Proprietary. All rights reserved.
+
+---
+
+**Questions or feedback?** Check [PRESENTATION_TO_TEAM.md](./PRESENTATION_TO_TEAM.md) for the full technical deep-dive.

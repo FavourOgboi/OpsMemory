@@ -335,6 +335,7 @@ async def process_incoming_message(
         and extracted.intent in auto_reply_intents
     ):
         response_text = await generate_customer_response(
+            business_id=business_id,
             business_name=business["name"],
             business_type=business["type"],
             customer_name=customer["name"],
@@ -342,6 +343,7 @@ async def process_incoming_message(
             conversation_history=recent_messages,
             agent_recommendation="Respond helpfully and professionally.",
             extracted_data=extracted,
+            customer=customer,
         )
         from app.services.whatsapp import send_whatsapp_message
 

@@ -163,6 +163,7 @@ async def extract_from_text(
 # ── Response Generation ──────────────────────────────────────────────────────
 
 async def generate_customer_response(
+    business_id: str,
     business_name: str,
     business_type: str,
     customer_name: str,
@@ -170,11 +171,35 @@ async def generate_customer_response(
     conversation_history: list,
     agent_recommendation: str,
     extracted_data: ExtractedData,
+    customer: dict = None,
 ) -> str:
     """
     Generates a customer-facing WhatsApp reply in the customer's detected language.
+    Now includes RAG retrieval — searches knowledge base before responding.
     Never reveals that it's an AI — always speaks as the business.
     """
+    from app.services.rag import retrieve_relevant_knowledge, format_knowledge_for_prompt
+
+    # ── RAG RETRIEVAL ─────────────────────────────────────────────────────────
+    # Use the customer's message as the search query
+    search_query = extracted_data.product_mentioned or ""
+    if extracted_data.intent in ["price_inquiry", "order_request", "general_inquiry"]:
+        # Also search using the raw message content if available
+        if conversation_history:
+            last_msg = conversation_history[-1].get("content", "")
+            search_query = search_query or last_msg[:100]
+
+    knowledge_context = ""
+    if search_query:
+        relevant_chunks = await retrieve_relevant_knowledge(
+            business_id=business_id,
+            query=search_query,
+            top_k=4,
+            threshold=0.68,
+        )
+        knowledge_context = format_knowledge_for_prompt(relevant_chunks)
+
+    # ── LANGUAGE INSTRUCTIONS ─────────────────────────────────────────────────
     language_instructions = {
         "pidgin": (
             "Respond ONLY in Nigerian Pidgin English. Be warm and natural. "
@@ -195,9 +220,29 @@ async def generate_customer_response(
         ),
     }
 
+    # ── CUSTOMER CONTEXT ──────────────────────────────────────────────────────
+    customer_context = ""
+    if customer:
+        total_spent = customer.get("total_revenue", 0)
+        days_since_order = customer.get("days_since_last_order", 0)
+        churn_risk = customer.get("churn_risk", "unknown")
+        health_score = customer.get("health_score", 50)
+        
+        customer_context = f"""
+CUSTOMER PROFILE:
+- Total lifetime spending: ₦{total_spent:,.0f}
+- Days since last order: {days_since_order}
+- Churn risk: {churn_risk}
+- Relationship health: {health_score}/100
+
+TONE GUIDANCE:
+- If total_spent > ₦500,000: Be warmer and more patient with this loyal customer
+- If churn_risk is 'high': Extra effort to retain them
+"""
+
     system_prompt = f"""
-You are a business assistant for {business_name}, a {business_type} business.
-You are responding to a customer via WhatsApp on behalf of the business.
+You are a sharp, warm sales representative for {business_name}, a {business_type} business.
+You know the business inside out and genuinely care about customers.
 
 CRITICAL RULES:
 - {language_instructions.get(language, language_instructions['english'])}
@@ -205,9 +250,21 @@ CRITICAL RULES:
 - Never say 'As an AI' or any similar phrase.
 - You ARE the business. You represent the business completely.
 - Be warm, helpful, and concise — WhatsApp messages should be short.
-- If you do not have enough information, say you will check and follow up.
-- Do not make up information.
-- Do not mention invoice numbers or amounts unless specifically relevant.
+
+WHEN CUSTOMERS OBJECT TO PRICE:
+- Acknowledge their concern briefly
+- Give ONE honest reason (inflation, naira rate, supply costs)
+- Redirect to value or next step
+- Never apologize for price. Never say "I'm sorry it's expensive"
+
+WHEN YOU DON'T KNOW SOMETHING:
+- Say you will check and follow up
+- Never invent prices, products, or policies
+- Only reference what's in the knowledge base below
+
+{customer_context}
+
+{knowledge_context}
 
 Agent recommendation: {agent_recommendation}
 Customer name: {customer_name}

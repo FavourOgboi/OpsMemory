@@ -2,6 +2,7 @@ import { Link, useRouterState } from '@tanstack/react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   BarChart3,
+  BookOpen,
   Bot,
   CheckSquare,
   ChevronLeft,
@@ -27,6 +28,7 @@ const NAV = [
   { to: '/dashboard/finance', label: 'Finance', icon: BarChart3 },
   { to: '/dashboard/team', label: 'Team', icon: Users },
   { to: '/dashboard/chat', label: 'Intelligence', icon: MessageCircle },
+  { to: '/dashboard/knowledge', label: 'Knowledge', icon: BookOpen },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 

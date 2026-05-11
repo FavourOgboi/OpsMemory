@@ -16,3 +16,4 @@ python-Levenshtein>=0.25.0
 Pillow>=10.4.0
 aiofiles>=24.1.0
 pytz>=2024.1
+pdfplumber>=0.11.0

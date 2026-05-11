@@ -16,6 +16,7 @@ import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as DashboardTeamRouteImport } from './routes/dashboard/team'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard/settings'
+import { Route as DashboardKnowledgeRouteImport } from './routes/dashboard/knowledge'
 import { Route as DashboardFinanceRouteImport } from './routes/dashboard/finance'
 import { Route as DashboardChatRouteImport } from './routes/dashboard/chat'
 import { Route as DashboardApprovalsRouteImport } from './routes/dashboard/approvals'
@@ -58,6 +59,11 @@ const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardKnowledgeRoute = DashboardKnowledgeRouteImport.update({
+  id: '/knowledge',
+  path: '/knowledge',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardFinanceRoute = DashboardFinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/approvals': typeof DashboardApprovalsRoute
   '/dashboard/chat': typeof DashboardChatRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/knowledge': typeof DashboardKnowledgeRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/team': typeof DashboardTeamRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/dashboard/approvals': typeof DashboardApprovalsRoute
   '/dashboard/chat': typeof DashboardChatRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/knowledge': typeof DashboardKnowledgeRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/team': typeof DashboardTeamRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/dashboard/approvals': typeof DashboardApprovalsRoute
   '/dashboard/chat': typeof DashboardChatRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/knowledge': typeof DashboardKnowledgeRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/team': typeof DashboardTeamRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/dashboard/approvals'
     | '/dashboard/chat'
     | '/dashboard/finance'
+    | '/dashboard/knowledge'
     | '/dashboard/settings'
     | '/dashboard/team'
     | '/sign-in/$'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/dashboard/approvals'
     | '/dashboard/chat'
     | '/dashboard/finance'
+    | '/dashboard/knowledge'
     | '/dashboard/settings'
     | '/dashboard/team'
     | '/sign-in/$'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/dashboard/approvals'
     | '/dashboard/chat'
     | '/dashboard/finance'
+    | '/dashboard/knowledge'
     | '/dashboard/settings'
     | '/dashboard/team'
     | '/sign-in/$'
@@ -239,6 +251,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/knowledge': {
+      id: '/dashboard/knowledge'
+      path: '/knowledge'
+      fullPath: '/dashboard/knowledge'
+      preLoaderRoute: typeof DashboardKnowledgeRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/finance': {
       id: '/dashboard/finance'
       path: '/finance'
@@ -289,6 +308,7 @@ interface DashboardRouteChildren {
   DashboardApprovalsRoute: typeof DashboardApprovalsRoute
   DashboardChatRoute: typeof DashboardChatRoute
   DashboardFinanceRoute: typeof DashboardFinanceRoute
+  DashboardKnowledgeRoute: typeof DashboardKnowledgeRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardTeamRoute: typeof DashboardTeamRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -301,6 +321,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardApprovalsRoute: DashboardApprovalsRoute,
   DashboardChatRoute: DashboardChatRoute,
   DashboardFinanceRoute: DashboardFinanceRoute,
+  DashboardKnowledgeRoute: DashboardKnowledgeRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardTeamRoute: DashboardTeamRoute,
   DashboardIndexRoute: DashboardIndexRoute,

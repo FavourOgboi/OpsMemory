@@ -18,6 +18,7 @@ from app.routers import (
     voice,
     passport,
     onboarding,
+    knowledge,
 )
 from app.jobs.scheduler import start_scheduler
 import logging
@@ -68,6 +69,7 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(voice.router, prefix="/api")
 app.include_router(passport.router, prefix="/api")
 app.include_router(onboarding.router, prefix="/api")
+app.include_router(knowledge.router, prefix="/api")
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
