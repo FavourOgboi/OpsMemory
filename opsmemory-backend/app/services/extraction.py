@@ -1,0 +1,228 @@
+"""
+OpsMemory — Extraction Pipeline
+
+The core intelligence layer. Every incoming WhatsApp message passes through here.
+Handles: text extraction (GPT-4o-mini), voice transcription (Whisper),
+image/receipt analysis (GPT-4o-mini vision), and response generation.
+
+Supports Nigerian English, Pidgin, Yoruba, and Igbo.
+"""
+
+from openai import AsyncOpenAI
+from app.config import settings
+from app.models.schemas import ExtractedData, Language
+import httpx
+import json
+import io
+
+client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+
+# ── System Prompts ────────────────────────────────────────────────────────────
+
+EXTRACTION_SYSTEM_PROMPT = """
+You are an expert extraction system for a Nigerian business communication platform.
+You receive raw WhatsApp messages from Nigerian customers — in English, Pidgin, Yoruba, Igbo, or mixed.
+You must extract structured data from every message with precision.
+
+Return ONLY a valid JSON object. No explanation. No markdown. No preamble. Just JSON.
+
+The JSON must match this exact schema:
+{
+  "intent": string,  // one of: payment_claim, order_request, delivery_inquiry, complaint, price_inquiry, general_inquiry, payment_promise, deal_negotiation, confirmation, greeting
+  "amount": number or null,  // in NGN, extract from text like "150k" = 150000, "1.5m" = 1500000
+  "order_ref": string or null,  // e.g. "2841", "ORD-001"
+  "customer_name": string or null,  // if they mention their name
+  "product_mentioned": string or null,
+  "date_mentioned": string or null,  // e.g. "Monday", "tomorrow", "3rd June"
+  "language": string,  // one of: english, pidgin, yoruba, igbo
+  "sentiment": string,  // one of: positive, neutral, negative, urgent
+  "confidence": number,  // 0.0 to 1.0
+  "is_payment_proof": boolean,  // true only if an image is attached AND it appears to be a payment receipt
+  "payment_amount_from_image": number or null,  // extracted from receipt image
+  "bank_name": string or null,  // e.g. "GTBank", "Access", "Zenith"
+  "transaction_id": string or null
+}
+
+Nigerian Pidgin signals: "oga", "abeg", "na", "sha", "dey", "wahala", "done pay", "go pay"
+Amount parsing: "150k" = 150000, "1.5m" = 1500000, "two hundred" = 200000, "₦45,000" = 45000
+"""
+
+IMAGE_EXTRACTION_PROMPT = """
+This image is from a Nigerian WhatsApp business conversation.
+If it is a bank transfer receipt or payment confirmation, extract:
+- amount (number in NGN)
+- bank_name (string)
+- transaction_id (string or null)
+- recipient_name (string or null)
+- transfer_date (string or null)
+
+Return ONLY valid JSON: {"is_payment_proof": true/false, "amount": number or null, "bank_name": string or null, "transaction_id": string or null}
+If it is not a payment proof, return: {"is_payment_proof": false, "amount": null, "bank_name": null, "transaction_id": null}
+"""
+
+
+# ── Voice Transcription ──────────────────────────────────────────────────────
+
+async def transcribe_voice_note(audio_url: str) -> str:
+    """Downloads audio from WhatsApp URL and transcribes via Whisper."""
+    async with httpx.AsyncClient() as http:
+        headers = {"Authorization": f"Bearer {settings.meta_whatsapp_token}"}
+        audio_response = await http.get(audio_url, headers=headers)
+
+    audio_bytes = audio_response.content
+    audio_file = io.BytesIO(audio_bytes)
+    audio_file.name = "voice.ogg"
+
+    transcript = await client.audio.transcriptions.create(
+        model="whisper-1",
+        file=audio_file,
+        language=None,  # Auto-detect — handles Pidgin and Nigerian English
+        prompt="This is a Nigerian business WhatsApp voice message. May include Pidgin, Yoruba, Igbo, or English.",
+    )
+    return transcript.text
+
+
+# ── Image Analysis ────────────────────────────────────────────────────────────
+
+async def extract_from_image(image_url: str) -> dict:
+    """Sends image to GPT-4o-mini vision for receipt extraction."""
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": IMAGE_EXTRACTION_PROMPT},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_url, "detail": "low"},
+                    },
+                ],
+            }
+        ],
+        max_tokens=200,
+        temperature=0,
+    )
+    raw = response.choices[0].message.content.strip()
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {
+            "is_payment_proof": False,
+            "amount": None,
+            "bank_name": None,
+            "transaction_id": None,
+        }
+
+
+# ── Text Extraction ──────────────────────────────────────────────────────────
+
+async def extract_from_text(
+    message_text: str,
+    image_context: dict = None,
+) -> ExtractedData:
+    """
+    Main extraction function. Takes message text (already transcribed if voice)
+    and optional image context, returns structured ExtractedData.
+    """
+    user_content = f"Message: {message_text}"
+    if image_context and image_context.get("is_payment_proof"):
+        user_content += (
+            f"\n\nImage attached — appears to be a payment receipt. "
+            f"Extracted from image: {json.dumps(image_context)}"
+        )
+
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        max_tokens=300,
+        temperature=0,
+        response_format={"type": "json_object"},
+    )
+
+    raw = response.choices[0].message.content.strip()
+    data = json.loads(raw)
+
+    # Merge image context into extraction result
+    if image_context:
+        data["is_payment_proof"] = image_context.get("is_payment_proof", False)
+        if image_context.get("amount"):
+            data["payment_amount_from_image"] = image_context["amount"]
+        if image_context.get("bank_name"):
+            data["bank_name"] = image_context["bank_name"]
+        if image_context.get("transaction_id"):
+            data["transaction_id"] = image_context["transaction_id"]
+
+    return ExtractedData(**data)
+
+
+# ── Response Generation ──────────────────────────────────────────────────────
+
+async def generate_customer_response(
+    business_name: str,
+    business_type: str,
+    customer_name: str,
+    language: str,
+    conversation_history: list,
+    agent_recommendation: str,
+    extracted_data: ExtractedData,
+) -> str:
+    """
+    Generates a customer-facing WhatsApp reply in the customer's detected language.
+    Never reveals that it's an AI — always speaks as the business.
+    """
+    language_instructions = {
+        "pidgin": (
+            "Respond ONLY in Nigerian Pidgin English. Be warm and natural. "
+            "Use common Pidgin phrases like 'oga', 'abeg', 'e don do', 'we go sort am'. "
+            "Sound like a smart Lagos sales rep."
+        ),
+        "yoruba": (
+            "Respond in English but include appropriate Yoruba greetings "
+            "(e kaaro/e kaale by time of day) and respectful phrases. Warm and professional."
+        ),
+        "igbo": (
+            "Respond in English but include appropriate Igbo greetings "
+            "(ndewo, biko) and maintain warm Igbo communication style."
+        ),
+        "english": (
+            "Respond in professional Nigerian business English. "
+            "Warm, competent, human. Not overly formal."
+        ),
+    }
+
+    system_prompt = f"""
+You are a business assistant for {business_name}, a {business_type} business.
+You are responding to a customer via WhatsApp on behalf of the business.
+
+CRITICAL RULES:
+- {language_instructions.get(language, language_instructions['english'])}
+- Never reveal you are an AI or automated system.
+- Never say 'As an AI' or any similar phrase.
+- You ARE the business. You represent the business completely.
+- Be warm, helpful, and concise — WhatsApp messages should be short.
+- If you do not have enough information, say you will check and follow up.
+- Do not make up information.
+- Do not mention invoice numbers or amounts unless specifically relevant.
+
+Agent recommendation: {agent_recommendation}
+Customer name: {customer_name}
+"""
+
+    # Include last 3 messages for context
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in conversation_history[-3:]:
+        role = "user" if msg["direction"] == "inbound" else "assistant"
+        messages.append({"role": role, "content": msg["content"]})
+
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        max_tokens=150,
+        temperature=0.7,
+    )
+    return response.choices[0].message.content.strip()

@@ -1,0 +1,79 @@
+"""
+OpsMemory — Business Health Passport PDF Generator
+
+Generates a branded PDF report with ReportLab containing:
+- Health Score banner
+- Key Operational Metrics table
+- Customer Portfolio table
+- OpsMemory branding and footer
+"""
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.colors import HexColor, white
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import mm
+from datetime import datetime, timedelta
+from app.database import supabase
+import io
+
+EMERALD = HexColor("#10B981")
+DARK = HexColor("#111827")
+LIGHT_GRAY = HexColor("#F9FAFB")
+
+
+async def generate_passport(business_id: str) -> bytes:
+    business = supabase.table("businesses").select("*").eq("id", business_id).single().execute().data
+    customers = supabase.table("customers").select("*").eq("business_id", business_id).execute().data
+    actions = supabase.table("agent_actions").select("*").eq("business_id", business_id).gte("created_at", (datetime.utcnow() - timedelta(days=30)).isoformat()).execute().data
+    events = supabase.table("live_events").select("*").eq("business_id", business_id).gte("created_at", (datetime.utcnow() - timedelta(days=30)).isoformat()).execute().data
+
+    total_revenue = sum(c.get("total_revenue", 0) for c in customers)
+    total_outstanding = sum(c.get("outstanding_balance", 0) for c in customers)
+    collection_rate = round(((total_revenue - total_outstanding) / total_revenue * 100) if total_revenue else 0, 1)
+    health_scores = [c.get("health_score", 80) for c in customers]
+    avg_health = round(sum(health_scores) / len(health_scores)) if health_scores else 0
+    high_risk_customers = [c for c in customers if c.get("churn_risk") in ["high", "critical"]]
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=15*mm, bottomMargin=15*mm, leftMargin=15*mm, rightMargin=15*mm)
+    styles = getSampleStyleSheet()
+    story = []
+
+    # Header
+    hc = "10B981" if avg_health >= 70 else "F59E0B" if avg_health >= 40 else "EF4444"
+    label = "Healthy" if avg_health >= 70 else "At Risk" if avg_health >= 40 else "Critical"
+
+    story.append(Paragraph(f"<font size=22 color='#10B981'><b>OpsMemory</b></font> — Business Health Passport", styles["Normal"]))
+    story.append(Paragraph(f"<font size=12 color='#111827'><b>{business['name']}</b></font> | Generated {datetime.now().strftime('%B %d, %Y')}", styles["Normal"]))
+    story.append(Spacer(1, 6*mm))
+    story.append(Paragraph(f"<font size=28 color='#{hc}'><b>{avg_health}/100</b></font> <font size=14 color='#{hc}'>{label}</font>", styles["Normal"]))
+    story.append(Spacer(1, 5*mm))
+
+    # Key Metrics
+    story.append(Paragraph("<b>Key Operational Metrics</b>", ParagraphStyle("h", fontSize=12, textColor=DARK, spaceAfter=4)))
+    m_data = [["Metric", "Value", "Status"],
+              ["Payment Collection Rate", f"{collection_rate}%", "Good" if collection_rate >= 80 else "Needs Attention"],
+              ["Total Revenue", f"₦{total_revenue:,.0f}", ""],
+              ["Outstanding Balance", f"₦{total_outstanding:,.0f}", "Action Required" if total_outstanding > 500000 else ""],
+              ["Active Customers", str(len(customers)), ""],
+              ["High Churn Risk", str(len(high_risk_customers)), "Action Required" if high_risk_customers else "Clear"],
+              ["Agent Actions (30d)", str(len(actions)), ""],
+              ["Events (30d)", str(len(events)), ""]]
+    mt = Table(m_data, colWidths=[80*mm, 55*mm, 45*mm])
+    mt.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),DARK),("TEXTCOLOR",(0,0),(-1,0),white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),9),("ROWBACKGROUNDS",(0,1),(-1,-1),[white,LIGHT_GRAY]),("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),("LEFTPADDING",(0,0),(-1,-1),6)]))
+    story.append(mt)
+    story.append(Spacer(1, 5*mm))
+
+    # Customer Portfolio
+    story.append(Paragraph("<b>Customer Portfolio</b>", ParagraphStyle("h2", fontSize=12, textColor=DARK, spaceAfter=4)))
+    ch = [["Customer", "Revenue", "Outstanding", "Health", "Risk"]]
+    cr = [[c.get("business_name") or c.get("name",""), f"₦{c.get('total_revenue',0):,.0f}", f"₦{c.get('outstanding_balance',0):,.0f}", str(c.get("health_score",0)), c.get("churn_risk","low").capitalize()] for c in sorted(customers, key=lambda x: x.get("total_revenue",0), reverse=True)[:8]]
+    ct = Table(ch + cr, colWidths=[55*mm, 35*mm, 35*mm, 20*mm, 25*mm])
+    ct.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),HexColor("#1A56DB")),("TEXTCOLOR",(0,0),(-1,0),white),("FONTNAME",(0,0),(-1,0),"Helvetica-Bold"),("FONTSIZE",(0,0),(-1,-1),8),("ROWBACKGROUNDS",(0,1),(-1,-1),[white,LIGHT_GRAY]),("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),("LEFTPADDING",(0,0),(-1,-1),5)]))
+    story.append(ct)
+    story.append(Spacer(1, 8*mm))
+
+    story.append(Paragraph(f"<font size=8 color='#94A3B8'>Generated by OpsMemory on {datetime.now().strftime('%B %d, %Y at %H:%M')}. opsmemory.ai</font>", styles["Normal"]))
+    doc.build(story)
+    return buffer.getvalue()
