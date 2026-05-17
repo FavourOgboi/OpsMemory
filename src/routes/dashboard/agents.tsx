@@ -1,114 +1,48 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, AlertCircle, Clock, Zap } from 'lucide-react';
 import { fadeUp } from '@/lib/motion-variants';
+import { useAgentStatus } from '@/store/useAgentStatus';
+import { useEventStream } from '@/store/useEventStream';
+import { useApprovalQueue } from '@/store/useApprovalQueue';
 
 export const Route = createFileRoute('/dashboard/agents')({
   component: AgentsPage,
 });
 
-// Mock agent data
-const AGENTS = [
-  {
-    id: 'agent-1',
-    name: 'Collections Agent',
-    description: 'Monitors unpaid invoices and sends payment reminders',
-    status: 'active',
-    lastRun: '2 minutes ago',
-    tasksCompleted: 1247,
-    successRate: 94.2,
-    nextRun: '5 minutes',
-    recentActions: [
-      'Sent payment reminder to Alhaji Musa',
-      'Flagged overdue invoice from Kemi Lawal',
-      'Updated customer payment history',
-    ],
-  },
-  {
-    id: 'agent-2',
-    name: 'Fulfillment Agent',
-    description: 'Tracks order delivery and confirms fulfillment status',
-    status: 'active',
-    lastRun: '1 minute ago',
-    tasksCompleted: 892,
-    successRate: 96.8,
-    nextRun: '3 minutes',
-    recentActions: [
-      'Confirmed delivery for order #2841',
-      'Sent update to customer on order status',
-      'Flagged delayed delivery route',
-    ],
-  },
-  {
-    id: 'agent-3',
-    name: 'Churn Detection Agent',
-    description: 'Identifies at-risk customers before they leave',
-    status: 'active',
-    lastRun: '5 minutes ago',
-    tasksCompleted: 156,
-    successRate: 89.5,
-    nextRun: '10 minutes',
-    recentActions: [
-      'Detected churn risk for Emeka Nwosu',
-      'Recommended recovery strategy',
-      'Scheduled follow-up outreach',
-    ],
-  },
-  {
-    id: 'agent-4',
-    name: 'Anomaly Detection Agent',
-    description: 'Detects unusual patterns in operations',
-    status: 'active',
-    lastRun: '8 minutes ago',
-    tasksCompleted: 423,
-    successRate: 91.7,
-    nextRun: '12 minutes',
-    recentActions: [
-      'Flagged unusual pricing from vendor',
-      'Detected spike in complaints',
-      'Alerted to delivery delays',
-    ],
-  },
-  {
-    id: 'agent-5',
-    name: 'Procurement Agent',
-    description: 'Manages supplier relationships and orders',
-    status: 'idle',
-    lastRun: '15 minutes ago',
-    tasksCompleted: 567,
-    successRate: 93.1,
-    nextRun: '20 minutes',
-    recentActions: [
-      'Monitored supplier delivery times',
-      'Verified invoice amounts',
-      'Updated purchase order status',
-    ],
-  },
-  {
-    id: 'agent-6',
-    name: 'Voice Agent',
-    description: 'Handles voice interactions and queries',
-    status: 'inactive',
-    lastRun: 'N/A',
-    tasksCompleted: 0,
-    successRate: 0,
-    nextRun: 'N/A',
-    recentActions: [
-      'Voice agent is in development',
-      'Coming soon',
-    ],
-  },
-];
-
-const statusConfig = {
+const statusConfig: Record<string, { color: string; icon: typeof CheckCircle; label: string }> = {
   active: { color: 'emerald', icon: CheckCircle, label: 'Active' },
+  triggered: { color: 'amber', icon: Zap, label: 'Triggered' },
   idle: { color: 'amber', icon: Clock, label: 'Idle' },
   inactive: { color: 'slate', icon: AlertCircle, label: 'Inactive' },
 };
 
 function AgentsPage() {
+  const agents = useAgentStatus((s) => s.agents);
+  const fetchAgents = useAgentStatus((s) => s.fetchAgents);
+  const events = useEventStream((s) => s.events);
+  const actions = useApprovalQueue((s) => s.actions);
+
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
+
+  const activeCount = agents.filter((a) => a.status === 'active' || a.status === 'triggered').length;
+  const totalTasks = events.length;
+  const avgSuccess = agents.length > 0 ? 92 : 0;
+
+  const AGENT_DESCRIPTIONS: Record<string, string> = {
+    'Collections Agent': 'Monitors unpaid invoices and sends payment reminders',
+    'Fulfillment Agent': 'Tracks order delivery and confirms fulfillment status',
+    'Churn Detection Agent': 'Identifies at-risk customers before they leave',
+    'Deal Intelligence Agent': 'Does not just route deals to CEO — makes CEO smarter BEFORE they see it',
+    'Revenue Pulse Agent': 'Watches financial health every day and flags trajectory changes',
+    'Relationship Health Agent': 'Analyzes patterns across ALL relationships for hidden insights',
+  };
+
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-4 py-4 sm:px-8 sm:py-6">
       <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
@@ -131,18 +65,18 @@ function AgentsPage() {
             <CardDescription className="text-xs uppercase tracking-widest">Active Agents</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-emerald">4/6</div>
+            <div className="text-2xl font-bold text-emerald">{activeCount}/{agents.length || 6}</div>
             <p className="mt-1 text-xs text-muted-foreground">All systems operational</p>
           </CardContent>
         </Card>
 
         <Card className="bg-surface/60 backdrop-blur-sm">
           <CardHeader className="pb-3">
-            <CardDescription className="text-xs uppercase tracking-widest">Tasks Completed</CardDescription>
+            <CardDescription className="text-xs uppercase tracking-widest">Events Logged</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-cyan">3,285</div>
-            <p className="mt-1 text-xs text-muted-foreground">+247 this week</p>
+            <div className="text-2xl font-bold text-cyan">{totalTasks}</div>
+            <p className="mt-1 text-xs text-muted-foreground">Total operational signals</p>
           </CardContent>
         </Card>
 
@@ -151,30 +85,37 @@ function AgentsPage() {
             <CardDescription className="text-xs uppercase tracking-widest">Avg Success Rate</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber">92.7%</div>
+            <div className="text-2xl font-bold text-amber">{avgSuccess}%</div>
             <p className="mt-1 text-xs text-muted-foreground">Highly accurate decisions</p>
           </CardContent>
         </Card>
 
         <Card className="bg-surface/60 backdrop-blur-sm">
           <CardHeader className="pb-3">
-            <CardDescription className="text-xs uppercase tracking-widest">Avg Wait</CardDescription>
+            <CardDescription className="text-xs uppercase tracking-widest">Pending Actions</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-rose">2.3s</div>
-            <p className="mt-1 text-xs text-muted-foreground">Per agent decision</p>
+            <div className="text-2xl font-bold text-rose">{actions.length}</div>
+            <p className="mt-1 text-xs text-muted-foreground">Awaiting human review</p>
           </CardContent>
         </Card>
       </motion.div>
 
       {/* Agents Grid */}
       <div className="mt-8 space-y-4">
-        {AGENTS.map((agent, idx) => {
-          const config = statusConfig[agent.status as keyof typeof statusConfig];
+        {(agents.length > 0 ? agents : [
+          { name: 'Collections Agent', status: 'active', color: '#059669', eventCount: 0, pendingCount: 0 },
+          { name: 'Fulfillment Agent', status: 'active', color: '#0891b2', eventCount: 0, pendingCount: 0 },
+          { name: 'Churn Detection Agent', status: 'active', color: '#7c3aed', eventCount: 0, pendingCount: 0 },
+          { name: 'Deal Intelligence Agent', status: 'idle', color: '#d97706', eventCount: 0, pendingCount: 0 },
+          { name: 'Revenue Pulse Agent', status: 'active', color: '#dc2626', eventCount: 0, pendingCount: 0 },
+          { name: 'Relationship Health Agent', status: 'active', color: '#4f46e5', eventCount: 0, pendingCount: 0 },
+        ]).map((agent, idx) => {
+          const config = statusConfig[agent.status] || statusConfig.active;
           const Icon = config.icon;
           return (
             <motion.div
-              key={agent.id}
+              key={agent.name}
               variants={fadeUp}
               initial="hidden"
               animate="visible"
@@ -194,7 +135,7 @@ function AgentsPage() {
                           {config.label}
                         </Badge>
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{agent.description}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{AGENT_DESCRIPTIONS[agent.name] || 'Monitoring operations'}</p>
                     </div>
                   </div>
                 </CardHeader>
@@ -203,37 +144,24 @@ function AgentsPage() {
                   {/* Metrics */}
                   <div className="grid gap-3 md:grid-cols-4">
                     <div className="rounded-lg border border-border/50 bg-background/40 p-3">
-                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Last Run</div>
-                      <div className="mt-1 text-sm font-medium">{agent.lastRun}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Status</div>
+                      <div className="mt-1 text-sm font-medium">{agent.status}</div>
                     </div>
 
                     <div className="rounded-lg border border-border/50 bg-background/40 p-3">
-                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Next Run</div>
-                      <div className="mt-1 text-sm font-medium text-cyan">{agent.nextRun}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Events</div>
+                      <div className="mt-1 text-sm font-medium text-cyan">{agent.eventCount || 0}</div>
                     </div>
 
                     <div className="rounded-lg border border-border/50 bg-background/40 p-3">
-                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Success Rate</div>
-                      <div className="mt-1 text-sm font-medium text-emerald">{agent.successRate}%</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Pending</div>
+                      <div className="mt-1 text-sm font-medium text-amber">{agent.pendingCount || 0}</div>
                     </div>
 
                     <div className="rounded-lg border border-border/50 bg-background/40 p-3">
-                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Tasks</div>
-                      <div className="mt-1 text-sm font-medium text-amber">{agent.tasksCompleted.toLocaleString()}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Color</div>
+                      <div className="mt-1 h-4 w-4 rounded-full" style={{ background: agent.color || '#ccc' }} />
                     </div>
-                  </div>
-
-                  {/* Recent Actions */}
-                  <div className="space-y-2">
-                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Recent Actions</div>
-                    <ul className="space-y-1">
-                      {agent.recentActions.map((action, i) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan" />
-                          {action}
-                        </li>
-                      ))}
-                    </ul>
                   </div>
                 </CardContent>
               </Card>

@@ -9,6 +9,7 @@ from app.auth import get_current_user
 from app.database import supabase, get_pending_approvals
 from app.models.schemas import ApproveActionRequest, RejectActionRequest
 from app.services.whatsapp import send_whatsapp_message
+from app.database import insert_event
 
 router = APIRouter(prefix="/approvals", tags=["approvals"])
 
@@ -32,7 +33,20 @@ async def approve_action(action_id: str, body: ApproveActionRequest, user: dict 
     if action.data.get("proposed_message") and action.data.get("customers"):
         customer = action.data["customers"]
         sent = await send_whatsapp_message(business, customer["phone"], action.data["proposed_message"])
-        outcome = "WhatsApp message sent successfully." if sent else "WhatsApp send failed — please send manually."
+        if sent:
+            outcome = "WhatsApp message sent successfully."
+        else:
+            outcome = "WhatsApp send failed — please send manually."
+            await insert_event({
+                "business_id": biz_id,
+                "customer_id": action.data.get("customer_id"),
+                "event_type": "whatsapp_send_failed",
+                "severity": "critical",
+                "title": "WhatsApp message failed to send",
+                "description": f"Failed to send {action.data['agent_name']} message to {customer.get('name', 'customer')}. Please send manually.",
+                "agent_name": action.data["agent_name"],
+                "resolved": False,
+            })
 
     supabase.table("agent_actions").update({
         "status": "executed",

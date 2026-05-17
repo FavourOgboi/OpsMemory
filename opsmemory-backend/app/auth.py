@@ -43,6 +43,7 @@ async def verify_clerk_token(
         if settings.app_env == "development":
             payload = jwt.decode(
                 token,
+                "",
                 options={"verify_signature": False},
             )
         else:
@@ -96,7 +97,7 @@ async def require_ceo(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
-async def require_role(allowed_roles: list):
+def require_role(allowed_roles: list):
     """Factory for role-based access control."""
     async def check_role(user: dict = Depends(get_current_user)) -> dict:
         if user["role"] not in allowed_roles:

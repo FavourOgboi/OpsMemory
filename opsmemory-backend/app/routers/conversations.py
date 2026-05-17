@@ -19,7 +19,10 @@ router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
 @router.get("/")
-async def list_conversations(user: dict = Depends(get_current_user)):
+async def list_conversations(
+    customer_id: str = None,
+    user: dict = Depends(get_current_user)
+):
     """Returns all conversations for the user's business, filtered by role."""
     biz_id = user["business_id"]
 
@@ -31,6 +34,9 @@ async def list_conversations(user: dict = Depends(get_current_user)):
         .eq("business_id", biz_id)
         .order("last_message_at", desc=True)
     )
+
+    if customer_id:
+        query = query.eq("customer_id", customer_id)
 
     # Sales reps only see their assigned conversations
     if user["role"] == "sales":

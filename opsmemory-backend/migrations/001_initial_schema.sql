@@ -155,6 +155,36 @@ CREATE TABLE orders (
 );
 
 
+-- ── INVOICES ────────────────────────────────────────────────────────────────────
+CREATE TABLE invoices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+    customer_id UUID REFERENCES customers(id),
+    ref TEXT,
+    amount NUMERIC NOT NULL DEFAULT 0,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
+    due_date TIMESTAMPTZ,
+    paid_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+-- ── PAYMENTS ────────────────────────────────────────────────────────────────────
+CREATE TABLE payments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    business_id UUID REFERENCES businesses(id) ON DELETE CASCADE,
+    customer_id UUID REFERENCES customers(id),
+    invoice_id UUID REFERENCES invoices(id),
+    amount NUMERIC NOT NULL DEFAULT 0,
+    method TEXT DEFAULT 'bank_transfer' CHECK (method IN ('bank_transfer', 'cash', 'pos', 'other')),
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'failed')),
+    confirmed_at TIMESTAMPTZ,
+    transaction_ref TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
 -- ── VOICE SESSIONS ────────────────────────────────────────────────────────────
 -- Temporary call context for the Twilio voice agent.
 CREATE TABLE voice_sessions (
@@ -178,6 +208,8 @@ ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE live_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE agent_actions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE voice_sessions ENABLE ROW LEVEL SECURITY;
 
@@ -193,5 +225,9 @@ CREATE INDEX idx_live_events_business_id ON live_events(business_id);
 CREATE INDEX idx_agent_actions_business_id_status ON agent_actions(business_id, status);
 CREATE INDEX idx_orders_customer_id ON orders(customer_id);
 CREATE INDEX idx_orders_business_id ON orders(business_id);
+CREATE INDEX idx_invoices_business_id ON invoices(business_id);
+CREATE INDEX idx_invoices_customer_id ON invoices(customer_id);
+CREATE INDEX idx_payments_business_id ON payments(business_id);
+CREATE INDEX idx_payments_customer_id ON payments(customer_id);
 CREATE INDEX idx_business_users_business_id ON business_users(business_id);
 CREATE INDEX idx_business_users_clerk_id ON business_users(clerk_user_id);

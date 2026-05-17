@@ -13,6 +13,7 @@ import {
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { api } from '@/lib/api';
 
 interface KnowledgeEntry {
   id: string;
@@ -55,26 +56,9 @@ export function KnowledgeList({
       return;
     }
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    if (!token) {
-      onError('Authentication required. Please sign in first.');
-      return;
-    }
-
     setDeleting(entryId);
     try {
-      const response = await fetch(`/api/knowledge/${entryId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to delete entry');
-      }
-
+      await api.delete(`/api/knowledge/${entryId}`);
       onDelete();
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Failed to delete entry');
@@ -155,8 +139,16 @@ export function KnowledgeList({
               transition={{ delay: idx * 0.05 }}
             >
               <Card
-                className={`${config.color} border p-4 hover:shadow-lg transition-all`}
+                className={`${config.color} border p-4 hover:shadow-lg transition-all overflow-hidden`}
               >
+                {entry.category === 'catalog' && entry.metadata?.image_url && (
+                  <img
+                    src={String(entry.metadata.image_url)}
+                    alt={entry.title || 'Product'}
+                    className="mb-3 h-32 w-full rounded-lg object-cover"
+                    loading="lazy"
+                  />
+                )}
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-start gap-3">
                     <Icon className="w-5 h-5 text-cyan-400 mt-1 flex-shrink-0" />
@@ -167,7 +159,14 @@ export function KnowledgeList({
                       <p className="text-xs text-slate-400 capitalize">
                         {entry.category}
                         {entry.source_file && ` • ${entry.source_file}`}
+                        {entry.metadata?.sku && ` • ${entry.metadata.sku}`}
                       </p>
+                      {entry.category === 'catalog' && entry.metadata?.price != null && (
+                        <p className="mt-1 text-sm font-semibold text-emerald-400">
+                          ₦{Number(entry.metadata.price).toLocaleString()}
+                          {entry.metadata.unit ? ` / ${entry.metadata.unit}` : ''}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <motion.button
@@ -191,7 +190,9 @@ export function KnowledgeList({
 
                 {entry.metadata && Object.keys(entry.metadata).length > 0 && (
                   <div className="text-xs text-slate-400 space-y-1 pt-2 border-t border-slate-600/50">
-                    {Object.entries(entry.metadata).map(([key, value]) => (
+                    {Object.entries(entry.metadata)
+                      .filter(([key]) => !['image_url'].includes(key))
+                      .map(([key, value]) => (
                       <div key={key}>
                         <span className="font-semibold">{key}:</span> {String(value)}
                       </div>

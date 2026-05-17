@@ -5,11 +5,8 @@ TwiML builders and GPT-4o-mini-powered spoken answer generation.
 Queries the Supabase memory layer for the caller's business context.
 """
 
-from openai import AsyncOpenAI
-from app.config import settings
 from app.database import supabase
-
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+from app.services.llm_client import get_llm_client, resolve_model
 
 VOICE_QUERY_PROMPT = """You are OpsMemory, an AI voice assistant for a Nigerian business.
 Someone from the business team is calling to ask about their operations.
@@ -71,8 +68,8 @@ class VoiceService:
         if approvals.data:
             context_parts.append(f"Pending approvals: {len(approvals.data)}")
 
-        response = await openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+        response = await get_llm_client("cheap").chat.completions.create(
+            model=resolve_model("cheap"),
             messages=[{"role": "user", "content": VOICE_QUERY_PROMPT.format(role=role, context="\n".join(context_parts), question=question)}],
             max_tokens=100,
             temperature=0.4,

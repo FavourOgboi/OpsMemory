@@ -21,38 +21,22 @@ import { FAQForm } from './FAQForm';
 import { PolicyForm } from './PolicyForm';
 import { DocumentUploader } from './DocumentUploader';
 import { KnowledgeList } from './KnowledgeList';
+import { api } from '@/lib/api';
 
 type Tab = 'catalog' | 'faq' | 'policy' | 'upload' | 'view';
 
-// Demo data for initial display
-const DEMO_KNOWLEDGE = [
-  {
-    id: '1',
-    title: 'iPhone 15 Pro',
-    content: 'Premium smartphone with advanced camera system, A17 Pro chip, titanium design. Available in 256GB, 512GB, 1TB variants.',
-    category: 'catalog',
-    metadata: { price: '450000', unit: 'piece', sku: 'IPHONE-15-PRO-256' },
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    title: 'What is our return policy?',
-    content: 'Question: What is our return policy?\nAnswer: We offer 7-day money-back guarantee for unopened items. 30-day replacement for defects. No questions asked returns within 48 hours of purchase.',
-    category: 'faq',
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: '3',
-    title: 'Delivery Policy',
-    content: 'Free delivery on orders above ₦50,000 within Lagos. Nationwide delivery 2-5 business days via courier. Track your order using the tracking code in your receipt.',
-    category: 'policy',
-    created_at: new Date().toISOString(),
-  },
-];
+interface KnowledgeEntry {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
 
 export function KnowledgeBase() {
   const [activeTab, setActiveTab] = useState<Tab>('view');
-  const [knowledge, setKnowledge] = useState(DEMO_KNOWLEDGE);
+  const [knowledge, setKnowledge] = useState<KnowledgeEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -63,27 +47,12 @@ export function KnowledgeBase() {
     setLoading(true);
     setError(null);
     try {
-      // Try to fetch from API, but fall back to demo data if not available
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-      const response = await fetch('/api/knowledge/', {
-        headers: token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {},
-      }).catch(() => null);
-
-      if (response && response.ok) {
-        const data = await response.json();
-        setKnowledge(data);
-      } else {
-        // Keep demo data if API fails
-        setKnowledge(DEMO_KNOWLEDGE);
-      }
+      const data = await api.get('/api/knowledge/');
+      const entries = data?.entries ?? data ?? [];
+      setKnowledge(Array.isArray(entries) ? entries : []);
     } catch (err) {
-      // Silently fail and keep demo data
-      console.log('Using demo knowledge data');
-      setKnowledge(DEMO_KNOWLEDGE);
+      setError('Could not load knowledge base. Is the backend running?');
+      setKnowledge([]);
     } finally {
       setLoading(false);
     }

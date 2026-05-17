@@ -3,9 +3,12 @@ import { motion } from 'framer-motion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ChevronRight, Search, X } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { fadeUp, staggerContainer } from '@/lib/motion-variants';
-import { CUSTOMERS, formatNaira } from '@/lib/mock-data';
+import { formatNaira } from '@/lib/format-utils';
+import { api } from '@/lib/api';
+import { mapCustomer } from '@/lib/api-mappers';
+import type { Customer } from '@/types';
 
 export const Route = createFileRoute('/dashboard/customers/')({
   component: CustomersPage,
@@ -21,24 +24,31 @@ const riskColors = {
 function CustomersPage() {
   const [search, setSearch] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('all');
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
-  const filtered = CUSTOMERS.filter(c => {
+  useEffect(() => {
+    api.get('/api/customers').then((data: any[]) => {
+      setCustomers((data || []).map(mapCustomer));
+    }).catch(() => {});
+  }, []);
+
+  const filtered = customers.filter((c: Customer) => {
     const matchSearch = c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.businessName.toLowerCase().includes(search.toLowerCase());
     const matchRisk = riskFilter === 'all' || c.churnRisk === riskFilter;
     return matchSearch && matchRisk;
   });
 
-  const highRisk = CUSTOMERS.filter(c => c.churnRisk === 'high').length;
-  const totalRevenue = CUSTOMERS.reduce((s, c) => s + c.totalRevenue, 0);
-  const totalOutstanding = CUSTOMERS.reduce((s, c) => s + c.outstandingBalance, 0);
+  const highRisk = customers.filter((c: Customer) => c.churnRisk === 'high').length;
+  const totalRevenue = customers.reduce((s, c) => s + c.totalRevenue, 0);
+  const totalOutstanding = customers.reduce((s, c) => s + c.outstandingBalance, 0);
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-4 py-4 sm:px-8 sm:py-6">
       <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">customers · crm</div>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Customers</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{CUSTOMERS.length} accounts tracked · {highRisk} at risk</p>
+        <p className="mt-2 text-sm text-muted-foreground">{customers.length} accounts tracked · {highRisk} at risk</p>
       </motion.header>
 
       {/* Stats */}

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
+import { installDevAuth } from '@/lib/dev-auth';
 import { useState } from 'react';
 
 export const Route = createFileRoute('/sign-in/$')({
@@ -19,7 +20,7 @@ function SignInPage() {
   const [password, setPassword] = useState('demo');
 
   const handleSignIn = () => {
-    // Demo: Load from localStorage or create demo user
+    installDevAuth('ceo');
     localStorage.setItem('demoUser', JSON.stringify({
       id: 'demo-user-1',
       name: 'Emeka Okonkwo',

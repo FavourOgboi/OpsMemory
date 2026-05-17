@@ -1,8 +1,11 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { AlertTriangle, Award, MessageSquare, ShoppingCart, Wallet } from 'lucide-react';
 import { fadeUp, staggerContainer, timelineDraw } from '@/lib/motion-variants';
-import { formatNaira, getCustomerTimeline } from '@/lib/mock-data';
+import { formatNaira } from '@/lib/format-utils';
+import { api } from '@/lib/api';
+import { mapTimelineFromApi } from '@/lib/api-mappers';
 import type { TimelineEvent } from '@/types';
 
 const ICONS = {
@@ -22,7 +25,25 @@ const COLORS = {
 };
 
 export function TimelineTab({ customerId }: { customerId: string }) {
-  const events: TimelineEvent[] = getCustomerTimeline(customerId);
+  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/api/customers/${customerId}/timeline`)
+      .then((data: any) => {
+        setEvents(mapTimelineFromApi(data));
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [customerId]);
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground">Loading timeline…</div>;
+  }
+
+  if (events.length === 0) {
+    return <div className="text-sm text-muted-foreground">No timeline events yet.</div>;
+  }
 
   return (
     <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="relative pl-10">

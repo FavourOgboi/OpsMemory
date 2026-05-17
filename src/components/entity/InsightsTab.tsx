@@ -1,7 +1,10 @@
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { AlertTriangle, ArrowRight, Brain, Lightbulb, Search } from 'lucide-react';
-import { getCustomerInsights } from '@/lib/mock-data';
+import { api } from '@/lib/api';
+import { mapInsight } from '@/lib/api-mappers';
 import { fadeUp, staggerContainer } from '@/lib/motion-variants';
+import type { Insight } from '@/types';
 
 const TYPE = {
   risk: { icon: AlertTriangle, color: 'oklch(0.68 0.21 20)', label: 'Risk' },
@@ -10,7 +13,27 @@ const TYPE = {
 };
 
 export function InsightsTab({ customerId }: { customerId: string }) {
-  const insights = getCustomerInsights(customerId);
+  const [insights, setInsights] = useState<Insight[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/api/customers/${customerId}/insights`)
+      .then((data: any) => {
+        if (data?.insights) {
+          setInsights(data.insights.map(mapInsight));
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [customerId]);
+
+  if (loading) {
+    return <div className="text-sm text-muted-foreground">Loading insights…</div>;
+  }
+
+  if (insights.length === 0) {
+    return <div className="text-sm text-muted-foreground">No insights available yet.</div>;
+  }
 
   return (
     <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="space-y-4">

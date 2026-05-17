@@ -8,14 +8,15 @@ image/receipt analysis (GPT-4o-mini vision), and response generation.
 Supports Nigerian English, Pidgin, Yoruba, and Igbo.
 """
 
-from openai import AsyncOpenAI
 from app.config import settings
 from app.models.schemas import ExtractedData, Language
+from app.services.llm_client import get_llm_client, get_whisper_client, resolve_model
 import httpx
 import json
 import io
+import logging
 
-client = AsyncOpenAI(api_key=settings.openai_api_key)
+logger = logging.getLogger(__name__)
 
 
 # ── System Prompts ────────────────────────────────────────────────────────────
@@ -29,13 +30,13 @@ Return ONLY a valid JSON object. No explanation. No markdown. No preamble. Just 
 
 The JSON must match this exact schema:
 {
-  "intent": string,  // one of: payment_claim, order_request, delivery_inquiry, complaint, price_inquiry, general_inquiry, payment_promise, deal_negotiation, confirmation, greeting
+  "intent": string,  // one of: payment_claim, order_request, delivery_inquiry, complaint, price_inquiry, general_inquiry, balance_inquiry, payment_promise, deal_negotiation, confirmation, greeting
   "amount": number or null,  // in NGN, extract from text like "150k" = 150000, "1.5m" = 1500000
   "order_ref": string or null,  // e.g. "2841", "ORD-001"
   "customer_name": string or null,  // if they mention their name
   "product_mentioned": string or null,
   "date_mentioned": string or null,  // e.g. "Monday", "tomorrow", "3rd June"
-  "language": string,  // one of: english, pidgin, yoruba, igbo
+  "language": string,  // one of: english, pidgin, yoruba, igbo, hausa
   "sentiment": string,  // one of: positive, neutral, negative, urgent
   "confidence": number,  // 0.0 to 1.0
   "is_payment_proof": boolean,  // true only if an image is attached AND it appears to be a payment receipt
@@ -46,6 +47,7 @@ The JSON must match this exact schema:
 
 Nigerian Pidgin signals: "oga", "abeg", "na", "sha", "dey", "wahala", "done pay", "go pay"
 Amount parsing: "150k" = 150000, "1.5m" = 1500000, "two hundred" = 200000, "₦45,000" = 45000
+Use balance_inquiry when the customer asks about outstanding balance, what they owe, invoice due, or account balance.
 """
 
 IMAGE_EXTRACTION_PROMPT = """
@@ -74,8 +76,11 @@ async def transcribe_voice_note(audio_url: str) -> str:
     audio_file = io.BytesIO(audio_bytes)
     audio_file.name = "voice.ogg"
 
-    transcript = await client.audio.transcriptions.create(
-        model="whisper-1",
+    from app.config import settings as app_settings
+
+    whisper_client = get_whisper_client()
+    transcript = await whisper_client.audio.transcriptions.create(
+        model=app_settings.openrouter_whisper_model,
         file=audio_file,
         language=None,  # Auto-detect — handles Pidgin and Nigerian English
         prompt="This is a Nigerian business WhatsApp voice message. May include Pidgin, Yoruba, Igbo, or English.",
@@ -87,8 +92,9 @@ async def transcribe_voice_note(audio_url: str) -> str:
 
 async def extract_from_image(image_url: str) -> dict:
     """Sends image to GPT-4o-mini vision for receipt extraction."""
+    client = get_llm_client("cheap")
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=resolve_model("cheap"),
         messages=[
             {
                 "role": "user",
@@ -108,6 +114,15 @@ async def extract_from_image(image_url: str) -> dict:
     try:
         return json.loads(raw)
     except Exception:
+        # JSON-repair fallback: look for first { and last }
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end != -1:
+                return json.loads(raw[start:end+1])
+        except Exception:
+            pass
+        logger.warning(f"Failed to parse image extraction JSON: {raw[:200]}")
         return {
             "is_payment_proof": False,
             "amount": None,
@@ -133,8 +148,9 @@ async def extract_from_text(
             f"Extracted from image: {json.dumps(image_context)}"
         )
 
+    client = get_llm_client("cheap")
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=resolve_model("cheap"),
         messages=[
             {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
@@ -145,7 +161,48 @@ async def extract_from_text(
     )
 
     raw = response.choices[0].message.content.strip()
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+    except Exception:
+        # JSON-repair fallback for models that ignore response_format
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1:
+            try:
+                data = json.loads(raw[start:end+1])
+            except Exception:
+                logger.error(f"Failed to parse extraction JSON: {raw[:300]}")
+                data = {
+                    "intent": "general_inquiry",
+                    "amount": None,
+                    "order_ref": None,
+                    "customer_name": None,
+                    "product_mentioned": None,
+                    "date_mentioned": None,
+                    "language": "english",
+                    "sentiment": "neutral",
+                    "confidence": 0.5,
+                    "is_payment_proof": False,
+                    "payment_amount_from_image": None,
+                    "bank_name": None,
+                    "transaction_id": None,
+                }
+        else:
+            data = {
+                "intent": "general_inquiry",
+                "amount": None,
+                "order_ref": None,
+                "customer_name": None,
+                "product_mentioned": None,
+                "date_mentioned": None,
+                "language": "english",
+                "sentiment": "neutral",
+                "confidence": 0.5,
+                "is_payment_proof": False,
+                "payment_amount_from_image": None,
+                "bank_name": None,
+                "transaction_id": None,
+            }
 
     # Merge image context into extraction result
     if image_context:
@@ -180,24 +237,44 @@ async def generate_customer_response(
     """
     from app.services.rag import retrieve_relevant_knowledge, format_knowledge_for_prompt
 
-    # ── RAG RETRIEVAL ─────────────────────────────────────────────────────────
-    # Use the customer's message as the search query
-    search_query = extracted_data.product_mentioned or ""
-    if extracted_data.intent in ["price_inquiry", "order_request", "general_inquiry"]:
-        # Also search using the raw message content if available
-        if conversation_history:
-            last_msg = conversation_history[-1].get("content", "")
-            search_query = search_query or last_msg[:100]
+    last_inbound = ""
+    if conversation_history:
+        for msg in reversed(conversation_history):
+            if msg.get("direction") == "inbound":
+                last_inbound = msg.get("content", "") or ""
+                break
 
+    intent = extracted_data.intent or "general_inquiry"
+    product_keywords = (
+        "product", "price", "rice", "beans", "fertilizer", "seed", "oil", "feed",
+        "catalogue", "catalog", "sell", "stock", "cost",
+    )
+    balance_keywords = (
+        "outstanding balance", "my balance", "what do i owe", "how much do i owe",
+        "balance on", "amount owing", "invoice due", "dey owe", "unpaid",
+    )
+    lower_inbound = (last_inbound or "").lower()
+    is_balance_question = intent == "balance_inquiry" or any(
+        k in lower_inbound for k in balance_keywords
+    )
+    mentions_products = any(k in lower_inbound for k in product_keywords)
+
+    # ── RAG RETRIEVAL (catalog/FAQ — not for balance-only questions) ──
     knowledge_context = ""
-    if search_query:
-        relevant_chunks = await retrieve_relevant_knowledge(
-            business_id=business_id,
-            query=search_query,
-            top_k=4,
-            threshold=0.68,
-        )
-        knowledge_context = format_knowledge_for_prompt(relevant_chunks)
+    if not is_balance_question and (
+        intent in ("price_inquiry", "order_request")
+        or (intent == "general_inquiry" and mentions_products)
+        or mentions_products
+    ):
+        search_query = extracted_data.product_mentioned or last_inbound[:120]
+        if search_query:
+            relevant_chunks = await retrieve_relevant_knowledge(
+                business_id=business_id,
+                query=search_query,
+                top_k=5,
+                threshold=0.72,
+            )
+            knowledge_context = format_knowledge_for_prompt(relevant_chunks)
 
     # ── LANGUAGE INSTRUCTIONS ─────────────────────────────────────────────────
     language_instructions = {
@@ -218,6 +295,10 @@ async def generate_customer_response(
             "Respond in professional Nigerian business English. "
             "Warm, competent, human. Not overly formal."
         ),
+        "hausa": (
+            "Respond in clear English with respectful Hausa greetings (sannu, na gode) "
+            "where natural. Warm Northern Nigerian business tone."
+        ),
     }
 
     # ── CUSTOMER CONTEXT ──────────────────────────────────────────────────────
@@ -228,9 +309,13 @@ async def generate_customer_response(
         churn_risk = customer.get("churn_risk", "unknown")
         health_score = customer.get("health_score", 50)
         
+        open_invoices = customer.get("open_invoices", 0)
+        outstanding = float(customer.get("outstanding_balance") or 0)
         customer_context = f"""
 CUSTOMER PROFILE:
 - Total lifetime spending: ₦{total_spent:,.0f}
+- Outstanding balance: ₦{outstanding:,.0f}
+- Open invoices: {open_invoices}
 - Days since last order: {days_since_order}
 - Churn risk: {churn_risk}
 - Relationship health: {health_score}/100
@@ -238,6 +323,44 @@ CUSTOMER PROFILE:
 TONE GUIDANCE:
 - If total_spent > ₦500,000: Be warmer and more patient with this loyal customer
 - If churn_risk is 'high': Extra effort to retain them
+"""
+
+    intent_guidance = ""
+    if is_balance_question:
+        outstanding = float((customer or {}).get("outstanding_balance") or 0)
+        open_invoices = int((customer or {}).get("open_invoices") or 0)
+        if outstanding > 0:
+            intent_guidance = f"""
+CURRENT TASK: The customer asked about their outstanding balance.
+Answer directly: they owe ₦{outstanding:,.0f} across {open_invoices} open invoice(s).
+Offer one clear next step (payment details, speak to finance, or confirm a payment they already made).
+Do NOT list product categories or give a generic company introduction.
+Keep it to 2–4 short WhatsApp sentences.
+"""
+        else:
+            intent_guidance = """
+CURRENT TASK: The customer asked about their outstanding balance.
+Answer directly: they have ₦0 outstanding on their account — all clear.
+Invite them to place an order or ask if they need anything else.
+Do NOT list product categories unless they explicitly asked for products.
+Keep it to 2–4 short WhatsApp sentences.
+"""
+    elif intent in ("price_inquiry", "order_request") or mentions_products:
+        intent_guidance = """
+CURRENT TASK: Customer asked about products or prices.
+Use ONLY prices and product names from the knowledge base below.
+Give specific ₦ amounts per unit. If they asked for a list, list 4-6 main items max.
+End with one question to move toward order (quantity, delivery area).
+Do NOT discuss account balance unless they asked for it.
+Keep under 80 words.
+"""
+    elif intent == "general_inquiry" and (
+        "bola" in lower_inbound or "company" in lower_inbound or "about" in lower_inbound
+    ):
+        intent_guidance = """
+CURRENT TASK: Customer wants to know about the business.
+Briefly describe Bola Agro Supplies (Lagos agro distributor: grains, oils, fertilizer, seeds, feed).
+Mention you can share prices and delivery terms. 3-4 sentences max.
 """
 
     system_prompt = f"""
@@ -264,22 +387,28 @@ WHEN YOU DON'T KNOW SOMETHING:
 
 {customer_context}
 
+{intent_guidance}
+
 {knowledge_context}
 
+Detected intent: {intent}
 Agent recommendation: {agent_recommendation}
 Customer name: {customer_name}
 """
 
-    # Include last 3 messages for context
+    # Include last 6 messages for context
     messages = [{"role": "system", "content": system_prompt}]
-    for msg in conversation_history[-3:]:
+    for msg in conversation_history[-6:]:
         role = "user" if msg["direction"] == "inbound" else "assistant"
         messages.append({"role": role, "content": msg["content"]})
 
+    reply_temperature = 0.25 if (is_balance_question or intent in ("price_inquiry", "order_request")) else 0.45
+
+    client = get_llm_client("cheap")
     response = await client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=resolve_model("cheap"),
         messages=messages,
-        max_tokens=150,
-        temperature=0.7,
+        max_tokens=220,
+        temperature=reply_temperature,
     )
     return response.choices[0].message.content.strip()

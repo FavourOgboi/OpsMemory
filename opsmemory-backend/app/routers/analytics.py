@@ -19,13 +19,25 @@ async def get_pulse(user: dict = Depends(get_current_user)):
     critical_events = supabase.table("live_events").select("id", count="exact").eq("business_id", biz_id).eq("resolved", False).in_("severity", ["critical", "warning"]).execute()
     active_convs = supabase.table("conversations").select("id", count="exact").eq("business_id", biz_id).eq("status", "open").execute()
 
-    total_revenue = sum(c.get("total_revenue", 0) for c in customers)
+    from datetime import datetime, timedelta, timezone
+
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    recent_orders = (
+        supabase.table("orders")
+        .select("total_amount")
+        .eq("business_id", biz_id)
+        .gte("created_at", week_ago)
+        .execute()
+        .data
+        or []
+    )
+    revenue_this_week = sum(float(o.get("total_amount") or 0) for o in recent_orders)
     outstanding = sum(c.get("outstanding_balance", 0) for c in customers)
     health_scores = [c.get("health_score", 80) for c in customers]
     avg_health = round(sum(health_scores) / len(health_scores)) if health_scores else 0
 
     return {
-        "revenue_this_week": total_revenue,
+        "revenue_this_week": revenue_this_week,
         "outstanding_total": outstanding,
         "active_conversations": active_convs.count or 0,
         "health_score": avg_health,
@@ -38,8 +50,20 @@ async def get_pulse(user: dict = Depends(get_current_user)):
 @router.get("/events")
 async def list_events(user: dict = Depends(get_current_user)):
     biz_id = user["business_id"]
-    result = supabase.table("live_events").select("*").eq("business_id", biz_id).order("created_at", desc=True).limit(100).execute()
-    return result.data
+    result = (
+        supabase.table("live_events")
+        .select("*, customers(name, business_name)")
+        .eq("business_id", biz_id)
+        .order("created_at", desc=True)
+        .limit(100)
+        .execute()
+    )
+    rows = []
+    for row in result.data or []:
+        cust = row.pop("customers", None) or {}
+        row["customer_name"] = cust.get("business_name") or cust.get("name") or ""
+        rows.append(row)
+    return rows
 
 
 @router.get("/agents/status")

@@ -1,15 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles } from 'lucide-react';
-import { SUGGESTED_QUERIES, MOCK_RESPONSES, DEFAULT_RESPONSE } from '@/lib/mock-data';
+import { SUGGESTED_QUERIES } from '@/lib/mock-data';
+import { api } from '@/lib/api';
 import { fadeUp } from '@/lib/motion-variants';
 
 type ChatMsg =
   | { role: 'user'; content: string }
   | { role: 'assistant'; content: string; tableData: { headers: string[]; rows: string[][] } | null }
-  | { role: 'thinking' };
+  | { role: 'thinking' }
+  | { role: 'error'; content: string };
 
-const ROLE = 'sales';
+function getDemoRole(): string {
+  if (typeof window === 'undefined') return 'ceo';
+  return localStorage.getItem('opsmemory-demo-role') || 'ceo';
+}
 
 export function IntelligenceChat() {
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -20,17 +25,25 @@ export function IntelligenceChat() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  const send = (q: string) => {
+  const send = async (q: string) => {
     if (!q.trim()) return;
     setMessages((m) => [...m, { role: 'user', content: q }, { role: 'thinking' }]);
     setInput('');
-    setTimeout(() => {
-      const r = MOCK_RESPONSES[q] ?? DEFAULT_RESPONSE;
+    try {
+      const res = await api.post('/api/chat/query', {
+        question: q,
+        role: getDemoRole(),
+      });
       setMessages((m) => {
         const copy = m.slice(0, -1);
-        return [...copy, { role: 'assistant', content: r.answer, tableData: r.tableData }];
+        return [...copy, { role: 'assistant', content: res.answer, tableData: res.table_data || null }];
       });
-    }, 1800);
+    } catch (err: any) {
+      setMessages((m) => {
+        const copy = m.slice(0, -1);
+        return [...copy, { role: 'error', content: err.message || 'Something went wrong. Try again.' }];
+      });
+    }
   };
 
   return (
@@ -45,9 +58,9 @@ export function IntelligenceChat() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin px-6 py-6">
         {messages.length === 0 ? (
           <div className="mx-auto max-w-2xl">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Suggested · for {ROLE}</div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Suggested · for {getDemoRole()}</div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {SUGGESTED_QUERIES[ROLE].map((q) => (
+              {SUGGESTED_QUERIES[getDemoRole() as keyof typeof SUGGESTED_QUERIES]?.map((q) => (
                 <motion.button
                   key={q}
                   whileHover={{ y: -2 }}
@@ -76,6 +89,10 @@ export function IntelligenceChat() {
                           <motion.span key={d} animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1.2, repeat: Infinity, delay: d * 0.2 }}>·</motion.span>
                         ))}
                       </span>
+                    </div>
+                  ) : m.role === 'error' ? (
+                    <div className="max-w-[90%] rounded-2xl rounded-tl-sm border border-rose/30 bg-rose/5 px-4 py-3 text-sm text-rose">
+                      {m.content}
                     </div>
                   ) : (
                     <div className="max-w-[90%] space-y-3">

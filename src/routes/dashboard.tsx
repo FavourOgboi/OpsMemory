@@ -1,7 +1,12 @@
 import { createServerFn } from '@tanstack/react-start';
-import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
+import { createFileRoute, Outlet } from '@tanstack/react-router';
+import { useEffect } from 'react';
 import { Sidebar } from '@/components/dashboard/Sidebar';
 import { DashboardTopBar } from '@/components/dashboard/DashboardTopBar';
+import { installDevAuth } from '@/lib/dev-auth';
+import { useEventStream } from '@/store/useEventStream';
+import { useAgentStatus } from '@/store/useAgentStatus';
+import { useApprovalQueue } from '@/store/useApprovalQueue';
 
 // DEMO MODE: Simplified auth check
 const requireAuth = createServerFn({ method: 'GET' }).handler(async () => {
@@ -21,6 +26,22 @@ export const Route = createFileRoute('/dashboard')({
 });
 
 function DashboardLayout() {
+  const fetchEvents = useEventStream((s) => s.fetchEvents);
+  const fetchAgents = useAgentStatus((s) => s.fetchAgents);
+  const fetchApprovals = useApprovalQueue((s) => s.fetchApprovals);
+
+  useEffect(() => {
+    installDevAuth('ceo');
+    const load = () => {
+      fetchEvents();
+      fetchAgents();
+      fetchApprovals();
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, [fetchEvents, fetchAgents, fetchApprovals]);
+
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <Sidebar />

@@ -120,26 +120,68 @@ class FulfillmentAgent(BaseAgent):
             .limit(1) \
             .execute()
 
-        if not overdue_orders.data:
+        if overdue_orders.data:
+            order = overdue_orders.data[0]
+            await self.propose_action(
+                customer=customer,
+                trigger_summary=(
+                    f"Order {order.get('order_ref', 'N/A')} for {customer.get('name')} "
+                    f"is past its promised delivery date."
+                ),
+                proposed_action=(
+                    f"Send proactive apology/update to {customer.get('name')} about "
+                    f"the delayed order. Investigate the delay internally."
+                ),
+                proposed_message=(
+                    f"Hi {customer.get('name', 'there')}, we wanted to let you know "
+                    f"your order is taking a bit longer than expected. We're working to "
+                    f"get it to you as soon as possible. We apologize for the delay!"
+                ),
+                risk_level="medium",
+                confidence=0.87,
+                track="assign",
+            )
             return
 
-        order = overdue_orders.data[0]
-        await self.propose_action(
-            customer=customer,
-            trigger_summary=(
-                f"Order {order.get('order_ref', 'N/A')} for {customer.get('name')} "
-                f"is past its promised delivery date."
-            ),
-            proposed_action=(
-                f"Send proactive apology/update to {customer.get('name')} about "
-                f"the delayed order. Investigate the delay internally."
-            ),
-            proposed_message=(
-                f"Hi {customer.get('name', 'there')}, we wanted to let you know "
-                f"your order is taking a bit longer than expected. We're working to "
-                f"get it to you as soon as possible. We apologize for the delay!"
-            ),
-            risk_level="medium",
-            confidence=0.87,
-            track="assign",
-        )
+        # Proactive delay detection: delivery within 24h but still in_transit
+        from datetime import timedelta
+        soon = (now + timedelta(hours=24)).isoformat()
+        approaching_orders = supabase.table("orders") \
+            .select("*") \
+            .eq("business_id", self.business_id) \
+            .eq("customer_id", customer["id"]) \
+            .eq("status", "in_transit") \
+            .lte("promised_delivery_at", soon) \
+            .gt("promised_delivery_at", now.isoformat()) \
+            .limit(1) \
+            .execute()
+
+        if approaching_orders.data:
+            order = approaching_orders.data[0]
+            await self.propose_action(
+                customer=customer,
+                trigger_summary=(
+                    f"Order {order.get('order_ref', 'N/A')} delivery is within 24h. "
+                    f"Proactive heads-up for {customer.get('name')}."
+                ),
+                proposed_action=(
+                    f"Send proactive delivery status to {customer.get('name')} before they ask."
+                ),
+                proposed_message=(
+                    f"Hi {customer.get('name', 'there')}, just a quick update — your order "
+                    f"is on track and should arrive tomorrow. We'll keep you posted if anything changes!"
+                ),
+                risk_level="low",
+                confidence=0.85,
+                track="auto",
+            )
+            return
+
+        # Route-learning stub: transit time > 50% above typical
+        self._check_route_anomaly(customer, now)
+
+    def _check_route_anomaly(self, customer: Dict, now: datetime) -> None:
+        """Stub for route anomaly detection. Stores delivery_route and typical_transit_hours on orders."""
+        # This is a stub — in production, compare actual transit vs stored typical_transit_hours
+        # and raise warning events if actual exceeds typical by >50% even before promised date.
+        pass

@@ -1,15 +1,18 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MetricCards } from '@/components/dashboard/MetricCards';
 import { RelationshipGraph } from '@/components/dashboard/RelationshipGraph';
 import { EventStream } from '@/components/dashboard/EventStream';
 import { AgentReasoningPanel } from '@/components/dashboard/AgentReasoningPanel';
-import { CUSTOMERS } from '@/lib/mock-data';
-import type { AgentAction } from '@/types';
+import type { AgentAction, Customer } from '@/types';
 import { useApprovalQueue } from '@/store/useApprovalQueue';
+import { useEventStream } from '@/store/useEventStream';
+import { useAgentStatus } from '@/store/useAgentStatus';
 import { ChevronRight } from 'lucide-react';
 import { fadeUp } from '@/lib/motion-variants';
+import { api } from '@/lib/api';
+import { mapCustomer } from '@/lib/api-mappers';
 
 export const Route = createFileRoute('/dashboard/')({
   component: Overview,
@@ -17,7 +20,31 @@ export const Route = createFileRoute('/dashboard/')({
 
 function Overview() {
   const [reasoning, setReasoning] = useState<AgentAction | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const pending = useApprovalQueue((s) => s.actions);
+  const fetchEvents = useEventStream((s) => s.fetchEvents);
+  const fetchAgents = useAgentStatus((s) => s.fetchAgents);
+  const fetchApprovals = useApprovalQueue((s) => s.fetchApprovals);
+
+  useEffect(() => {
+    const refresh = () => {
+      fetchEvents();
+      fetchAgents();
+      fetchApprovals();
+      api
+        .get('/api/customers/')
+        .then((data) => {
+          const rows = (data || [])
+            .map(mapCustomer)
+            .filter((c) => c.name && c.name !== '+' && !/^\+?\d+$/.test(c.name.trim()));
+          setCustomers(rows);
+        })
+        .catch(() => {});
+    };
+    refresh();
+    const interval = setInterval(refresh, 8000);
+    return () => clearInterval(interval);
+  }, [fetchEvents, fetchAgents, fetchApprovals]);
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -50,7 +77,7 @@ function Overview() {
             <div className="flex-1 rounded-2xl border border-border bg-surface/60 p-5 backdrop-blur-sm">
               <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Watched accounts</div>
               <div className="mt-3 space-y-2.5">
-                {CUSTOMERS.map((c) => (
+                {customers.slice(0, 8).map((c) => (
                   <Link
                     key={c.id}
                     to="/dashboard/customers/$id"
@@ -69,6 +96,9 @@ function Overview() {
                     </div>
                   </Link>
                 ))}
+                {customers.length === 0 && (
+                  <div className="text-xs text-muted-foreground py-2">Loading customers...</div>
+                )}
               </div>
             </div>
           </motion.div>
