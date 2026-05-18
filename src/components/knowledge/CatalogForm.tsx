@@ -87,11 +87,15 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
   };
 
   return (
-    <Card className="border-slate-700 bg-slate-800/50 p-8 max-w-2xl">
+    <Card className={`p-8 max-w-2xl ${
+      isDark 
+        ? 'border-slate-700 bg-slate-800/50' 
+        : 'border-slate-200 bg-white'
+    }`}>
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Product Name */}
         <div>
-          <Label htmlFor="name" className="text-slate-200">
+          <Label htmlFor="name" className={isDark ? 'text-slate-200' : 'text-slate-700'}>
             Product Name *
           </Label>
           <Input
@@ -102,13 +106,13 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
             value={formData.name}
             onChange={handleChange}
             required
-            className="mt-2 bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
+            className={`mt-2 ${isDark ? 'bg-slate-900 border-slate-600 text-white placeholder:text-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400'}`}
           />
         </div>
 
         {/* Description */}
         <div>
-          <Label htmlFor="description" className="text-slate-200">
+          <Label htmlFor="description" className={isDark ? 'text-slate-200' : 'text-slate-700'}>
             Description *
           </Label>
           <Textarea
@@ -119,14 +123,14 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
             onChange={handleChange}
             required
             rows={4}
-            className="mt-2 bg-slate-900 border-slate-600 text-white placeholder:text-slate-500 resize-none"
+            className={`mt-2 resize-none ${isDark ? 'bg-slate-900 border-slate-600 text-white placeholder:text-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400'}`}
           />
         </div>
 
         {/* Price & Unit */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="price" className="text-slate-200">
+            <Label htmlFor="price" className={isDark ? 'text-slate-200' : 'text-slate-700'}>
               Price (₦) *
             </Label>
             <Input
@@ -138,11 +142,11 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
               onChange={handleChange}
               required
               step="0.01"
-              className="mt-2 bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
+              className={`mt-2 ${isDark ? 'bg-slate-900 border-slate-600 text-white placeholder:text-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400'}`}
             />
           </div>
           <div>
-            <Label htmlFor="unit" className="text-slate-200">
+            <Label htmlFor="unit" className={isDark ? 'text-slate-200' : 'text-slate-700'}>
               Unit *
             </Label>
             <Input
@@ -153,14 +157,14 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
               value={formData.unit}
               onChange={handleChange}
               required
-              className="mt-2 bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
+              className={`mt-2 ${isDark ? 'bg-slate-900 border-slate-600 text-white placeholder:text-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400'}`}
             />
           </div>
         </div>
 
         {/* SKU */}
         <div>
-          <Label htmlFor="sku" className="text-slate-200">
+          <Label htmlFor="sku" className={isDark ? 'text-slate-200' : 'text-slate-700'}>
             SKU (Optional)
           </Label>
           <Input
@@ -170,7 +174,7 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
             placeholder="e.g., iPhone-15-PRO-256GB"
             value={formData.sku}
             onChange={handleChange}
-            className="mt-2 bg-slate-900 border-slate-600 text-white placeholder:text-slate-500"
+            className={`mt-2 ${isDark ? 'bg-slate-900 border-slate-600 text-white placeholder:text-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder:text-slate-400'}`}
           />
         </div>
 
@@ -180,9 +184,9 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
             id="available"
             checked={formData.available}
             onCheckedChange={handleCheckboxChange}
-            className="border-slate-500 bg-slate-900"
+            className={isDark ? 'border-slate-500 bg-slate-900' : 'border-slate-300 bg-white'}
           />
-          <Label htmlFor="available" className="text-slate-200 font-normal">
+          <Label htmlFor="available" className={`font-normal ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
             Currently available for sale
           </Label>
         </div>
@@ -192,7 +196,11 @@ export function CatalogForm({ onSuccess, onError, isDark = true }: CatalogFormPr
           <Button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-semibold py-2 rounded-lg transition-all"
+            className={`w-full font-semibold py-2 rounded-lg transition-all text-white ${
+              isDark
+                ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700'
+                : 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600'
+            }`}
           >
             {loading ? (
               <>

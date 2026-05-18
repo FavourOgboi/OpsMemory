@@ -136,7 +136,7 @@ export function Hero() {
               ))}
             </div>
             <p className="text-sm text-muted-foreground">
-              Built for Lagos distributors, retailers, finance teams, and owner-operators.
+              Built for distributors, retailers, finance teams, and owner-operators.
             </p>
           </motion.div>
         </motion.div>

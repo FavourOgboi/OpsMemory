@@ -70,3 +70,6 @@ Thumbs.db
 # Misc
 .cache/
 *.bak
+
+# presentation readme
+PRESENTATION_TO_TEAM.md
