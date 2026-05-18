@@ -27,8 +27,25 @@ import type { Business } from '@/types';
 
 export const Route = createFileRoute('/dashboard/settings')({
   loader: async () => {
-    const raw = await api.get('/api/onboarding/business');
-    return { business: mapBusiness(raw) };
+    try {
+      const raw = await api.get('/api/onboarding/business');
+      return { business: mapBusiness(raw) };
+    } catch {
+      // Backend offline – return safe defaults so the page still renders
+      return {
+        business: mapBusiness({
+          id: '',
+          name: 'My Business',
+          type: 'Retail',
+          whatsapp_number: '+234',
+          whatsapp_connected: false,
+          auto_reply_enabled: true,
+          deal_approval_threshold: 100000,
+          created_at: '',
+          updated_at: '',
+        }),
+      };
+    }
   },
   component: SettingsPage,
 });

@@ -1,27 +1,29 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Package,
   HelpCircle,
   FileText,
   Upload,
   Eye,
-  X,
-  Loader,
+  Loader2,
   AlertCircle,
+  CheckCircle2,
+  Brain,
+  ChevronRight,
 } from 'lucide-react';
-import { useTheme } from '@/store/useTheme';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { CatalogForm } from './CatalogForm';
 import { FAQForm } from './FAQForm';
 import { PolicyForm } from './PolicyForm';
 import { DocumentUploader } from './DocumentUploader';
 import { KnowledgeList } from './KnowledgeList';
 import { api } from '@/lib/api';
+import { fadeUp, staggerContainer } from '@/lib/motion-variants';
+import { useTheme } from '@/store/useTheme';
 
 type Tab = 'catalog' | 'faq' | 'policy' | 'upload' | 'view';
 
@@ -34,6 +36,14 @@ interface KnowledgeEntry {
   created_at: string;
 }
 
+const TABS = [
+  { id: 'catalog' as Tab, label: 'Products',       icon: Package,    desc: 'Products & pricing' },
+  { id: 'faq'     as Tab, label: 'FAQs',           icon: HelpCircle, desc: 'Common questions'   },
+  { id: 'policy'  as Tab, label: 'Policies',       icon: FileText,   desc: 'Delivery & returns'  },
+  { id: 'upload'  as Tab, label: 'Upload',         icon: Upload,     desc: 'PDF, TXT, Markdown' },
+  { id: 'view'    as Tab, label: 'All Entries',    icon: Eye,        desc: 'Browse & manage'    },
+] as const;
+
 export function KnowledgeBase() {
   const [activeTab, setActiveTab] = useState<Tab>('view');
   const [knowledge, setKnowledge] = useState<KnowledgeEntry[]>([]);
@@ -42,7 +52,6 @@ export function KnowledgeBase() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const { isDark } = useTheme();
 
-  // Fetch knowledge entries on mount
   const fetchKnowledge = async () => {
     setLoading(true);
     setError(null);
@@ -50,7 +59,7 @@ export function KnowledgeBase() {
       const data = await api.get('/api/knowledge/');
       const entries = data?.entries ?? data ?? [];
       setKnowledge(Array.isArray(entries) ? entries : []);
-    } catch (err) {
+    } catch {
       setError('Could not load knowledge base. Is the backend running?');
       setKnowledge([]);
     } finally {
@@ -74,141 +83,172 @@ export function KnowledgeBase() {
     setTimeout(() => setError(null), 5000);
   };
 
-  const tabs = [
-    {
-      id: 'catalog',
-      label: 'Add Product',
-      icon: Package,
-      description: 'Add products, services, and pricing',
-    },
-    {
-      id: 'faq',
-      label: 'Add FAQ',
-      icon: HelpCircle,
-      description: 'Add common questions and answers',
-    },
-    {
-      id: 'policy',
-      label: 'Add Policy',
-      icon: FileText,
-      description: 'Add delivery, payment, or return policies',
-    },
-    {
-      id: 'upload',
-      label: 'Upload Document',
-      icon: Upload,
-      description: 'Upload PDF, TXT, or Markdown documents',
-    },
-    {
-      id: 'view',
-      label: 'View All',
-      icon: Eye,
-      description: 'See all knowledge base entries',
-    },
-  ];
+  const categoryCount = (cat: string) =>
+    knowledge.filter((e) => e.category === cat).length;
 
   return (
-    <div className={`flex-1 overflow-hidden flex flex-col ${
-      isDark 
-        ? 'bg-gradient-to-b from-slate-950 to-slate-900' 
-        : 'bg-gradient-to-b from-slate-50 to-slate-100'
-    }`}>
-      <div className="flex-1 overflow-y-auto p-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className={`text-4xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>Knowledge Base</h1>
-          <p className={isDark ? 'text-slate-400' : 'text-slate-600'}>
-            Train your AI agents with products, FAQs, policies, and documents
-          </p>
+    <div className="h-full overflow-y-auto scrollbar-thin px-4 py-4 sm:px-8 sm:py-6">
+      {/* ── Header ───────────────────────────────────────────── */}
+      <motion.header initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          knowledge · base
         </div>
-
-        {/* Alerts */}
-        {successMessage && (
-          <Alert className={`mb-6 ${isDark ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-emerald-300/50 bg-emerald-50'}`}>
-            <AlertCircle className={`h-4 w-4 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
-            <AlertDescription className={isDark ? 'text-emerald-400' : 'text-emerald-700'}>
-              {successMessage}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {error && (
-          <Alert className={`mb-6 ${isDark ? 'border-rose-500/50 bg-rose-500/10' : 'border-rose-300/50 bg-rose-50'}`}>
-            <AlertCircle className={`h-4 w-4 ${isDark ? 'text-rose-400' : 'text-rose-600'}`} />
-            <AlertDescription className={isDark ? 'text-rose-400' : 'text-rose-700'}>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Tabs Navigation */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <motion.button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as Tab)}
-                className={`relative p-4 rounded-lg border transition-all ${
-                  isActive
-                    ? isDark 
-                      ? 'border-cyan-500/50 bg-cyan-500/10 shadow-lg shadow-cyan-500/20'
-                      : 'border-cyan-400/60 bg-cyan-50 shadow-lg shadow-cyan-400/20'
-                    : isDark
-                      ? 'border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800'
-                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
-                }`}
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <Icon className={`w-6 h-6 mx-auto mb-2 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
-                <p className={`text-sm font-medium text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {tab.label}
-                </p>
-                <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{tab.description}</p>
-              </motion.button>
-            );
-          })}
+        <div className="mt-1 flex items-center gap-3">
+          <Brain className="h-6 w-6 text-primary" />
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
+            Knowledge Base
+          </h1>
         </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Train your AI agents with products, FAQs, policies, and documents
+        </p>
+      </motion.header>
 
-        {/* Content Area */}
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          {loading && activeTab === 'view' && (
-            <Card className={`border p-8 flex items-center justify-center ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-white'}`}>
-              <Loader className={`w-8 h-8 animate-spin ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+      {/* ── Stats row ─────────────────────────────────────────── */}
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+        className="mt-6 grid gap-4 sm:grid-cols-4"
+      >
+        {[
+          { label: 'Products',  value: categoryCount('catalog'),  color: 'text-emerald' },
+          { label: 'FAQs',      value: categoryCount('faq'),      color: 'text-cyan'    },
+          { label: 'Policies',  value: categoryCount('policy'),   color: 'text-violet'  },
+          { label: 'Documents', value: categoryCount('document'), color: 'text-amber'   },
+        ].map((stat) => (
+          <motion.div key={stat.label} variants={fadeUp}>
+            <Card className="border border-border bg-surface/60 backdrop-blur-sm">
+              <CardHeader className="pb-2">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {stat.label}
+                </span>
+              </CardHeader>
+              <CardContent>
+                <div className={`font-display text-2xl font-bold tracking-tight ${stat.color}`}>
+                  {stat.value}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">entries</p>
+              </CardContent>
             </Card>
-          )}
+          </motion.div>
+        ))}
+      </motion.div>
 
-          {activeTab === 'catalog' && (
-            <CatalogForm onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
-          )}
+      {/* ── Toast alerts ──────────────────────────────────────── */}
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div
+            key="success"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-4 flex items-center gap-3 rounded-xl border border-emerald/30 bg-emerald/10 px-4 py-3"
+          >
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald" />
+            <span className="text-sm text-emerald">{successMessage}</span>
+          </motion.div>
+        )}
+        {error && (
+          <motion.div
+            key="error"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mt-4 flex items-center gap-3 rounded-xl border border-rose/30 bg-rose/10 px-4 py-3"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose" />
+            <span className="text-sm text-rose">{error}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {activeTab === 'faq' && (
-            <FAQForm onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
-          )}
+      {/* ── Tab strip ─────────────────────────────────────────── */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.15 }}
+        className="mt-6 flex gap-1 overflow-x-auto rounded-xl border border-border bg-surface/60 p-1 backdrop-blur-sm"
+      >
+        {TABS.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                isActive
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
+              }`}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+              {tab.id === 'view' && knowledge.length > 0 && (
+                <Badge
+                  variant="outline"
+                  className="ml-1 border-primary/30 bg-primary/10 px-1.5 py-0 text-[10px] text-primary"
+                >
+                  {knowledge.length}
+                </Badge>
+              )}
+            </button>
+          );
+        })}
+      </motion.div>
 
-          {activeTab === 'policy' && (
-            <PolicyForm onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
-          )}
+      {/* ── Active tab description ────────────────────────────── */}
+      <motion.div
+        key={activeTab + '-desc'}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="mt-3 flex items-center gap-1.5"
+      >
+        <ChevronRight className="h-3 w-3 text-muted-foreground" />
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {TABS.find((t) => t.id === activeTab)?.desc}
+        </span>
+      </motion.div>
 
-          {activeTab === 'upload' && (
-            <DocumentUploader onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
-          )}
+      {/* ── Content area ─────────────────────────────────────── */}
+      <motion.div
+        key={activeTab}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        className="mt-4 mb-8"
+      >
+        {/* Loading state for "view" tab */}
+        {loading && activeTab === 'view' && (
+          <Card className="border border-border bg-surface/60 backdrop-blur-sm">
+            <CardContent className="flex items-center justify-center py-16">
+              <Loader2 className="h-7 w-7 animate-spin text-primary" />
+            </CardContent>
+          </Card>
+        )}
 
-          {activeTab === 'view' && !loading && (
-            <KnowledgeList
-              entries={knowledge}
-              onDelete={fetchKnowledge}
-              onError={handleError}
-              isDark={isDark}
-            />
-          )}
-        </motion.div>
-      </div>
+        {activeTab === 'catalog' && (
+          <CatalogForm onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
+        )}
+        {activeTab === 'faq' && (
+          <FAQForm onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
+        )}
+        {activeTab === 'policy' && (
+          <PolicyForm onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
+        )}
+        {activeTab === 'upload' && (
+          <DocumentUploader onSuccess={handleSuccess} onError={handleError} isDark={isDark} />
+        )}
+        {activeTab === 'view' && !loading && (
+          <KnowledgeList
+            entries={knowledge}
+            onDelete={fetchKnowledge}
+            onError={handleError}
+            isDark={isDark}
+          />
+        )}
+      </motion.div>
     </div>
   );
 }
