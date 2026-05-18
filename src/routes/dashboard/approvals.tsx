@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApprovalCard } from '@/components/approvals/ApprovalCard';
 import { AgentReasoningPanel } from '@/components/dashboard/AgentReasoningPanel';
@@ -16,7 +16,12 @@ function Approvals() {
   const actions = useApprovalQueue((s) => s.actions);
   const approve = useApprovalQueue((s) => s.approve);
   const reject = useApprovalQueue((s) => s.reject);
+  const fetchApprovals = useApprovalQueue((s) => s.fetchApprovals);
   const [reasoning, setReasoning] = useState<AgentAction | null>(null);
+
+  useEffect(() => {
+    fetchApprovals();
+  }, [fetchApprovals]);
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-4 py-4 sm:px-8 sm:py-6">
@@ -30,7 +35,7 @@ function Approvals() {
         <AnimatePresence mode="popLayout">
           {actions.map((a) => (
             <motion.div key={a.id} layout variants={fadeUp}>
-              <ApprovalCard action={a} onApprove={approve} onReject={reject} onInspect={setReasoning} />
+              <ApprovalCard action={a} onApprove={() => approve(a.id)} onReject={() => reject(a.id)} onInspect={setReasoning} />
             </motion.div>
           ))}
         </AnimatePresence>

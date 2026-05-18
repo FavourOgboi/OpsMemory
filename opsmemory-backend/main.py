@@ -19,9 +19,14 @@ from app.routers import (
     passport,
     onboarding,
     knowledge,
+    finance,
 )
 from app.jobs.scheduler import start_scheduler
+from app.config import settings
 import logging
+
+logger = logging.getLogger(__name__)
+DEMO_BUSINESS_ID = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +38,9 @@ logging.basicConfig(
 async def lifespan(app: FastAPI):
     """Start scheduler on startup, cleanup on shutdown."""
     start_scheduler()
+    base = (settings.base_url or "http://localhost:8000").rstrip("/")
+    logger.info("Meta webhook:  %s/webhook/whatsapp/%s", base, DEMO_BUSINESS_ID)
+    logger.info("Twilio webhook: %s/webhook/twilio/%s", base, DEMO_BUSINESS_ID)
     yield
 
 
@@ -46,11 +54,7 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://opsmemory.vercel.app",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,10 +74,29 @@ app.include_router(voice.router, prefix="/api")
 app.include_router(passport.router, prefix="/api")
 app.include_router(onboarding.router, prefix="/api")
 app.include_router(knowledge.router, prefix="/api")
+app.include_router(finance.router, prefix="/api")
 
 
 # ── Health check ──────────────────────────────────────────────────────────────
 
+from app.database import supabase
+
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "OpsMemory Backend", "version": "1.0.0"}
+    try:
+        # Quick Supabase connectivity check
+        result = supabase.table("businesses").select("id", count="exact").limit(1).execute()
+        return {
+            "status": "ok",
+            "service": "OpsMemory Backend",
+            "version": "1.0.0",
+            "database": "connected",
+        }
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "service": "OpsMemory Backend",
+            "version": "1.0.0",
+            "database": "disconnected",
+            "error": str(e),
+        }

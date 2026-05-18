@@ -34,10 +34,17 @@ dist-ssr
 # clerk configuration (can include secrets)
 /.clerk/
 
-# Environment variables and secrets
+# Environment variables and secrets (never commit real values)
 .env
 .env.local
 .env.*.local
+.env.production
+.env.development
+tunnel-url.txt
+**/credentials.json
+**/*secret*.json
+*.pem
+*.key
 
 # Lovable - AI generator specific files
 .lovable/
@@ -70,6 +77,6 @@ Thumbs.db
 # Misc
 .cache/
 *.bak
-
-# presentation readme
-PRESENTATION_TO_TEAM.md
+test-output/
+.cursor/
+.windsurf/

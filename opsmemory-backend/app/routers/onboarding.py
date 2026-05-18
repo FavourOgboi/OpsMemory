@@ -95,6 +95,16 @@ async def invite_team_member(body: InviteTeamMemberRequest, user: dict = Depends
     return {"member_id": member["id"], "message": f"Invitation sent to {body.email} as {body.role}"}
 
 
+@router.get("/business")
+async def get_business(user: dict = Depends(get_current_user)):
+    """Returns the current user's business profile."""
+    biz_id = user["business_id"]
+    result = supabase.table("businesses").select("*").eq("id", biz_id).single().execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Business not found")
+    return result.data
+
+
 @router.get("/team")
 async def list_team(user: dict = Depends(get_current_user)):
     """Lists all team members for the user's business."""

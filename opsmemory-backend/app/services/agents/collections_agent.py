@@ -21,12 +21,9 @@ If payment arrives at any step, close campaign with outcome.
 from app.services.agents.base_agent import BaseAgent
 from app.models.schemas import ExtractedData
 from app.services.campaign_manager import CampaignManager
-from openai import AsyncOpenAI
-from app.config import settings
+from app.services.llm_client import get_llm_client, resolve_model
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
-
-client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 COLLECTIONS_PROMPT = """
 You are the Collections Agent for a Nigerian business.
@@ -75,8 +72,9 @@ class CollectionsAgent(BaseAgent):
         days_overdue = customer.get("days_since_last_order", 0)
 
         # Draft the follow-up message
+        client = get_llm_client("cheap")
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=resolve_model("cheap"),
             messages=[
                 {
                     "role": "user",
@@ -287,8 +285,9 @@ Language: {language}
 Return ONLY the WhatsApp message. No explanation.
 """
 
+        client = get_llm_client("cheap")
         response = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=resolve_model("cheap"),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=150,
             temperature=0.6,
@@ -296,11 +295,7 @@ Return ONLY the WhatsApp message. No explanation.
 
         step_2_message = response.choices[0].message.content.strip()
 
-        # Create agent action to send this message
-        from app.services.agents.base_agent import BaseAgent
-
-        agent = BaseAgent()
-        await agent.propose_action(
+        await self.propose_action(
             customer=customer,
             trigger_summary=f"Step 2: Second collection reminder. {outstanding:,.0f} still outstanding.",
             proposed_action="Send firmer follow-up message via WhatsApp.",

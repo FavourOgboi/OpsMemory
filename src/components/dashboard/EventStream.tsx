@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { CheckCircle2, AlertTriangle, XCircle, Zap, Bot } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useEventStream } from '@/store/useEventStream';
-import { NEW_EVENT_TEMPLATES } from '@/lib/mock-data';
 import { eventSlideIn } from '@/lib/motion-variants';
 import type { EventSeverity } from '@/types';
 
@@ -16,15 +15,15 @@ const SEV: Record<EventSeverity, { color: string; Icon: typeof CheckCircle2 }> =
 
 export function EventStream() {
   const events = useEventStream((s) => s.events);
-  const addEvent = useEventStream((s) => s.addEvent);
+  const fetchEvents = useEventStream((s) => s.fetchEvents);
 
   useEffect(() => {
+    fetchEvents();
     const id = setInterval(() => {
-      const tpl = NEW_EVENT_TEMPLATES[Math.floor(Math.random() * NEW_EVENT_TEMPLATES.length)];
-      addEvent({ ...tpl, id: `e-${Date.now()}`, timestamp: new Date().toISOString() });
-    }, 8000);
+      fetchEvents();
+    }, 15000);
     return () => clearInterval(id);
-  }, [addEvent]);
+  }, [fetchEvents]);
 
   return (
     <div className="flex h-full flex-col rounded-2xl border border-border bg-surface/60 backdrop-blur-sm">

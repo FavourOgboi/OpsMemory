@@ -13,8 +13,13 @@ class Settings(BaseSettings):
     supabase_service_role_key: str
     supabase_anon_key: str
 
-    # ── OpenAI ────────────────────────────────────────────────────────────
-    openai_api_key: str
+    # ── OpenRouter (all LLM + embeddings + transcription) ─────────────────
+    openrouter_api_key: str = ""
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_model_cheap: str = "openai/gpt-4o-mini"
+    openrouter_model_premium: str = "anthropic/claude-sonnet-4-20250514"
+    openrouter_whisper_model: str = "openai/whisper-1"
+    openrouter_embedding_model: str = "openai/text-embedding-3-small"
 
     # ── Clerk ─────────────────────────────────────────────────────────────
     clerk_secret_key: str
@@ -26,6 +31,11 @@ class Settings(BaseSettings):
     meta_whatsapp_verify_token: str
     meta_phone_number_id: str
     meta_business_account_id: str
+    meta_graph_api_version: str = "v25.0"
+    meta_app_secret: str = ""  # Meta App Secret — used for webhook HMAC (not the access token)
+
+    # Outbound WhatsApp: meta | twilio | auto (auto prefers Meta when configured)
+    whatsapp_provider: str = "auto"
 
     # ── Twilio ────────────────────────────────────────────────────────────
     twilio_account_sid: str

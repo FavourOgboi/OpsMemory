@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,95 +18,28 @@ import {
   X,
 } from 'lucide-react';
 import { fadeUp, staggerContainer, scaleIn } from '@/lib/motion-variants';
-import { STAFF, CUSTOMERS } from '@/lib/mock-data';
+import { api } from '@/lib/api';
 
 export const Route = createFileRoute('/dashboard/team')({
   component: TeamPage,
 });
 
-/* ─── Extended team mock data ─── */
-const TEAM_MEMBERS = [
-  {
-    id: 'u-ceo',
-    name: 'Bola Adeyemi',
-    role: 'CEO',
-    email: 'bola@bolaagro.com',
-    phone: '+2348031000001',
-    status: 'online' as const,
-    avatar: 'B',
-    department: 'Executive',
-    customers: 0,
-    tasksCompleted: 42,
-    joinedDate: 'Mar 2020',
-    permissions: ['full-access', 'approvals', 'finance', 'agents'],
-    lastActive: 'Just now',
-    color: 'oklch(0.78 0.16 175)',
-  },
-  {
-    id: 'u-001',
-    name: 'Tunde Bakare',
-    role: 'Sales Lead',
-    email: 'tunde@bolaagro.com',
-    phone: '+2348031000002',
-    status: 'online' as const,
-    avatar: 'T',
-    department: 'Sales',
-    customers: CUSTOMERS.filter(c => c.assignedTo === 'u-001').length,
-    tasksCompleted: 187,
-    joinedDate: 'Jun 2021',
-    permissions: ['customers', 'approvals', 'chat'],
-    lastActive: '5 min ago',
-    color: 'oklch(0.78 0.13 210)',
-  },
-  {
-    id: 'u-002',
-    name: 'Ngozi Eze',
-    role: 'Sales Rep',
-    email: 'ngozi@bolaagro.com',
-    phone: '+2348031000003',
-    status: 'online' as const,
-    avatar: 'N',
-    department: 'Sales',
-    customers: CUSTOMERS.filter(c => c.assignedTo === 'u-002').length,
-    tasksCompleted: 145,
-    joinedDate: 'Sep 2021',
-    permissions: ['customers', 'chat'],
-    lastActive: '12 min ago',
-    color: 'oklch(0.66 0.21 295)',
-  },
-  {
-    id: 'u-003',
-    name: 'Kemi Lawal',
-    role: 'Finance Manager',
-    email: 'kemi@bolaagro.com',
-    phone: '+2348031000004',
-    status: 'away' as const,
-    avatar: 'K',
-    department: 'Finance',
-    customers: 0,
-    tasksCompleted: 312,
-    joinedDate: 'Jan 2022',
-    permissions: ['finance', 'approvals', 'invoices'],
-    lastActive: '1 hr ago',
-    color: 'oklch(0.78 0.16 75)',
-  },
-  {
-    id: 'u-004',
-    name: 'Seyi Afolabi',
-    role: 'Operations Manager',
-    email: 'seyi@bolaagro.com',
-    phone: '+2348031000005',
-    status: 'offline' as const,
-    avatar: 'S',
-    department: 'Operations',
-    customers: 0,
-    tasksCompleted: 256,
-    joinedDate: 'Apr 2022',
-    permissions: ['fulfillment', 'logistics', 'approvals'],
-    lastActive: '3 hrs ago',
-    color: 'oklch(0.68 0.21 20)',
-  },
-];
+interface TeamMember {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
+  phone: string;
+  status: 'online' | 'away' | 'offline';
+  avatar: string;
+  department: string;
+  customers: number;
+  tasksCompleted: number;
+  joinedDate: string;
+  permissions: string[];
+  lastActive: string;
+  color: string;
+}
 
 const statusColors = {
   online: 'bg-emerald',
@@ -115,26 +48,65 @@ const statusColors = {
 };
 
 const roleIcons: Record<string, typeof Crown> = {
-  CEO: Crown,
-  'Sales Lead': Star,
-  'Sales Rep': UserCheck,
-  'Finance Manager': Shield,
-  'Operations Manager': UserCog,
+  ceo: Crown,
+  manager: Star,
+  sales: UserCheck,
+  finance: Shield,
+  operations: UserCog,
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  ceo: 'CEO',
+  manager: 'Manager',
+  sales: 'Sales',
+  finance: 'Finance',
+  operations: 'Operations',
+};
+
+const DEPT_COLORS: Record<string, string> = {
+  ceo: 'oklch(0.78 0.16 175)',
+  manager: 'oklch(0.78 0.13 210)',
+  sales: 'oklch(0.66 0.21 295)',
+  finance: 'oklch(0.78 0.16 75)',
+  operations: 'oklch(0.68 0.21 20)',
 };
 
 function TeamPage() {
   const [search, setSearch] = useState('');
-  const [selectedMember, setSelectedMember] = useState<typeof TEAM_MEMBERS[0] | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
 
-  const filteredMembers = TEAM_MEMBERS.filter(m =>
+  useEffect(() => {
+    api.get('/api/onboarding/team').then((data) => {
+      const mapped: TeamMember[] = (data || []).map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        role: m.role,
+        email: m.email || '',
+        phone: m.phone || '',
+        status: 'online',
+        avatar: m.name ? m.name.charAt(0).toUpperCase() : '?',
+        department: ROLE_LABELS[m.role] || m.role,
+        customers: 0,
+        tasksCompleted: 0,
+        joinedDate: m.created_at ? new Date(m.created_at).toLocaleDateString() : '',
+        permissions: [m.role],
+        lastActive: 'Recently',
+        color: DEPT_COLORS[m.role] || 'oklch(0.6 0.1 200)',
+      }));
+      setMembers(mapped);
+    }).catch(() => {});
+  }, []);
+
+  const filteredMembers = members.filter((m: TeamMember) =>
     m.name.toLowerCase().includes(search.toLowerCase()) ||
     m.role.toLowerCase().includes(search.toLowerCase()) ||
     m.department.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const onlineCount = TEAM_MEMBERS.filter(m => m.status === 'online').length;
-  const totalTasks = TEAM_MEMBERS.reduce((sum, m) => sum + m.tasksCompleted, 0);
-  const totalCustomersCovered = TEAM_MEMBERS.reduce((sum, m) => sum + m.customers, 0);
+  const onlineCount = members.filter((m: TeamMember) => m.status === 'online').length;
+  const totalTasks = members.reduce((sum, m) => sum + m.tasksCompleted, 0);
+  const totalCustomersCovered = members.reduce((sum, m) => sum + m.customers, 0);
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-4 py-4 sm:px-8 sm:py-6">
@@ -160,7 +132,7 @@ function TeamPage() {
               <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Team Size</span>
             </CardHeader>
             <CardContent>
-              <div className="font-display text-2xl font-bold tracking-tight">{TEAM_MEMBERS.length}</div>
+              <div className="font-display text-2xl font-bold tracking-tight">{members.length}</div>
               <p className="mt-1 text-xs text-muted-foreground">Active members</p>
             </CardContent>
           </Card>
@@ -173,7 +145,7 @@ function TeamPage() {
             </CardHeader>
             <CardContent>
               <div className="font-display text-2xl font-bold tracking-tight text-emerald">{onlineCount}</div>
-              <p className="mt-1 text-xs text-muted-foreground">{Math.round((onlineCount / TEAM_MEMBERS.length) * 100)}% availability</p>
+              <p className="mt-1 text-xs text-muted-foreground">{members.length > 0 ? Math.round((onlineCount / members.length) * 100) : 0}% availability</p>
             </CardContent>
           </Card>
         </motion.div>
@@ -196,7 +168,7 @@ function TeamPage() {
               <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Accounts Covered</span>
             </CardHeader>
             <CardContent>
-              <div className="font-display text-2xl font-bold tracking-tight text-amber">{totalCustomersCovered}/{CUSTOMERS.length}</div>
+              <div className="font-display text-2xl font-bold tracking-tight text-amber">{totalCustomersCovered}</div>
               <p className="mt-1 text-xs text-muted-foreground">Assigned to reps</p>
             </CardContent>
           </Card>

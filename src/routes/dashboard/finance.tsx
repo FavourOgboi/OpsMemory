@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -18,55 +19,87 @@ import {
   Wallet,
 } from 'lucide-react';
 import { fadeUp, staggerContainer } from '@/lib/motion-variants';
-import { formatNaira, CUSTOMERS, INVOICES } from '@/lib/mock-data';
+import { formatNaira } from '@/lib/format-utils';
+import { api } from '@/lib/api';
+import { mapCustomer } from '@/lib/api-mappers';
+import type { Customer } from '@/types';
+
+interface FinanceHistoryPoint {
+  month: string;
+  revenue: number;
+  collected: number;
+}
+
+interface InvoiceItem {
+  id: string;
+  status: string;
+  amount: number;
+  total?: number;
+  created_at?: string;
+  date?: string;
+  customers?: { name: string };
+  customer_name?: string;
+  payment_method?: string;
+  method?: string;
+}
+
+interface PaymentItem {
+  id: string;
+  status: string;
+  amount: number;
+  amount_paid?: number;
+  created_at?: string;
+  date?: string;
+  customers?: { name: string };
+  customer_name?: string;
+  payment_method?: string;
+  method?: string;
+}
+
+interface FinanceStats {
+  pending_total: number;
+  overdue_total: number;
+  paid_total: number;
+  total_invoices: number;
+  total_payments: number;
+}
+
+interface FinanceData {
+  invoices: InvoiceItem[];
+  payments: PaymentItem[];
+  stats: FinanceStats;
+}
 
 export const Route = createFileRoute('/dashboard/finance')({
   component: FinancePage,
 });
 
-/* ─── Mock finance data ─── */
-const REVENUE_MONTHS = [
-  { month: 'Jan', revenue: 1800000, collected: 1620000 },
-  { month: 'Feb', revenue: 2100000, collected: 1890000 },
-  { month: 'Mar', revenue: 1950000, collected: 1755000 },
-  { month: 'Apr', revenue: 2400000, collected: 2040000 },
-  { month: 'May', revenue: 2650000, collected: 2120000 },
-  { month: 'Jun', revenue: 2300000, collected: 2070000 },
-];
-
-const RECENT_TRANSACTIONS = [
-  { id: 'txn-1', customer: 'Danladi Grains', type: 'payment' as const, amount: 450000, date: '2 hours ago', method: 'Bank Transfer', status: 'confirmed' as const },
-  { id: 'txn-2', customer: 'Adaeze Supermarket', type: 'payment' as const, amount: 95000, date: '5 hours ago', method: 'Screenshot', status: 'confirmed' as const },
-  { id: 'txn-3', customer: 'Nnamdi Provisions', type: 'payment' as const, amount: 320000, date: '8 hours ago', method: 'Bank Alert', status: 'confirmed' as const },
-  { id: 'txn-4', customer: 'Alhaji Musa Traders', type: 'invoice' as const, amount: 150000, date: '1 day ago', method: 'Pending', status: 'pending' as const },
-  { id: 'txn-5', customer: 'Emeka Distribution Co', type: 'invoice' as const, amount: 320000, date: '3 days ago', method: 'Overdue', status: 'overdue' as const },
-  { id: 'txn-6', customer: 'Mama Funke Stores', type: 'invoice' as const, amount: 180000, date: '5 days ago', method: 'Overdue', status: 'overdue' as const },
-  { id: 'txn-7', customer: 'Amina Mart', type: 'payment' as const, amount: 45000, date: '1 week ago', method: 'Mobile Transfer', status: 'confirmed' as const },
-];
-
-const EXPENSE_CATEGORIES = [
-  { category: 'Procurement', amount: 1420000, percentage: 58, color: 'oklch(0.78 0.16 175)' },
-  { category: 'Logistics', amount: 380000, percentage: 16, color: 'oklch(0.78 0.13 210)' },
-  { category: 'Staff Salaries', amount: 340000, percentage: 14, color: 'oklch(0.78 0.16 75)' },
-  { category: 'Utilities', amount: 165000, percentage: 7, color: 'oklch(0.66 0.21 295)' },
-  { category: 'Other', amount: 120000, percentage: 5, color: 'oklch(0.68 0.21 20)' },
-];
-
-const maxRevenue = Math.max(...REVENUE_MONTHS.map(m => m.revenue));
-
 function FinancePage() {
   const [txnFilter, setTxnFilter] = useState<'all' | 'payment' | 'invoice'>('all');
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [financeData, setFinanceData] = useState<FinanceData | null>(null);
+  const [history, setHistory] = useState<FinanceHistoryPoint[]>([]);
 
-  const totalRevenue = 2400000;
-  const totalCollected = 1510000;
-  const totalOutstanding = 890000;
-  const collectionRate = 84;
-  const overdueInvoices = INVOICES.filter(i => i.status === 'overdue');
-  const pendingInvoices = INVOICES.filter(i => i.status === 'pending');
+  useEffect(() => {
+    api.get('/api/customers').then((data) => setCustomers((data || []).map(mapCustomer))).catch(() => {});
+    api.get('/api/finance/summary').then((data) => setFinanceData(data as FinanceData)).catch(() => {});
+    api.get('/api/finance/history').then((data: { history?: FinanceHistoryPoint[] }) => setHistory(data.history || [])).catch(() => {});
+  }, []);
 
-  const filteredTxns = txnFilter === 'all'
-    ? RECENT_TRANSACTIONS
-    : RECENT_TRANSACTIONS.filter(t => t.type === txnFilter);
+  const totalRevenue = financeData?.stats?.paid_total || 0;
+  const totalCollected = totalRevenue;
+  const totalOutstanding = financeData?.stats?.overdue_total || 0;
+  const collectionRate = totalRevenue > 0 ? Math.round((totalRevenue / (totalRevenue + totalOutstanding)) * 100) : 0;
+  const invoices = financeData?.invoices || [];
+  const payments = financeData?.payments || [];
+  const overdueInvoices = invoices.filter((i) => i.status === 'overdue');
+  const pendingInvoices = invoices.filter((i) => i.status === 'pending');
+
+  const allTxns: (InvoiceItem | PaymentItem)[] = txnFilter === 'all'
+    ? [...payments, ...invoices]
+    : txnFilter === 'payment'
+    ? payments
+    : invoices;
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-4 py-4 sm:px-8 sm:py-6">
@@ -75,7 +108,7 @@ function FinancePage() {
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">finance · overview</div>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Financial Intelligence</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Revenue tracking, payment monitoring, and financial health for {CUSTOMERS.length} accounts
+          Revenue tracking, payment monitoring, and financial health for {customers.length} accounts
         </p>
       </motion.header>
 
@@ -175,7 +208,7 @@ function FinancePage() {
         </motion.div>
       </motion.div>
 
-      {/* Revenue Chart + Expense Breakdown */}
+        {/* Revenue Chart + Expense Breakdown */}
       <div className="mt-8 grid gap-6 lg:grid-cols-[2fr_1fr]">
         {/* Revenue Bar Chart */}
         <motion.div variants={fadeUp} initial="hidden" animate="visible">
@@ -193,36 +226,26 @@ function FinancePage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {REVENUE_MONTHS.map((m, idx) => (
-                  <motion.div
-                    key={m.month}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.08 }}
-                    className="group"
-                  >
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="font-mono text-muted-foreground">{m.month}</span>
-                      <span className="text-foreground/80">{formatNaira(m.revenue, true)}</span>
-                    </div>
-                    <div className="relative h-6 overflow-hidden rounded-md bg-background/60">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(m.revenue / maxRevenue) * 100}%` }}
-                        transition={{ duration: 0.6, delay: idx * 0.08, ease: 'easeOut' }}
-                        className="absolute inset-y-0 left-0 rounded-md bg-primary/25"
-                      />
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(m.collected / maxRevenue) * 100}%` }}
-                        transition={{ duration: 0.6, delay: idx * 0.08 + 0.1, ease: 'easeOut' }}
-                        className="absolute inset-y-0 left-0 rounded-md bg-gradient-to-r from-primary to-cyan"
-                      />
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
+              <div className="h-64">
+              {history.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={history} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 12, fill: 'var(--muted-foreground)' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `₦${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip
+                      formatter={(value: number) => [`₦${value.toLocaleString()}`, '']}
+                      contentStyle={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
+                    />
+                    <Legend iconType="square" wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="revenue" fill="var(--primary)" radius={[4, 4, 0, 0]} name="Revenue" />
+                    <Bar dataKey="collected" fill="var(--cyan)" radius={[4, 4, 0, 0]} name="Collected" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Monthly revenue chart will populate once data is seeded.</div>
+              )}
+            </div>
             </CardContent>
           </Card>
         </motion.div>
@@ -231,41 +254,31 @@ function FinancePage() {
         <motion.div variants={fadeUp} initial="hidden" animate="visible" transition={{ delay: 0.2 }}>
           <Card className="h-full border border-border bg-surface/60 backdrop-blur-sm">
             <CardHeader>
-              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Operating Expenses</div>
-              <h3 className="mt-1 font-display text-lg font-semibold">Expense Breakdown</h3>
-              <div className="mt-1 font-display text-2xl font-bold tracking-tight text-rose">{formatNaira(2425000, true)}</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Finance Summary</div>
+              <h3 className="mt-1 font-display text-lg font-semibold">Collection Overview</h3>
+              <div className="mt-1 font-display text-2xl font-bold tracking-tight text-emerald">{formatNaira(totalRevenue, true)}</div>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {EXPENSE_CATEGORIES.map((cat, idx) => (
-                  <motion.div
-                    key={cat.category}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 + idx * 0.08 }}
-                  >
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="font-medium text-foreground">{cat.category}</span>
-                      <span className="font-mono text-muted-foreground">{formatNaira(cat.amount, true)}</span>
-                    </div>
-                    <div className="relative h-2 overflow-hidden rounded-full bg-background/60">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${cat.percentage}%` }}
-                        transition={{ duration: 0.6, delay: 0.3 + idx * 0.08 }}
-                        className="absolute inset-y-0 left-0 rounded-full"
-                        style={{ background: cat.color }}
-                      />
-                    </div>
-                  </motion.div>
-                ))}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground">Pending</span>
+                  <span className="font-mono text-muted-foreground">{formatNaira(financeData?.stats?.pending_total || 0, true)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground">Overdue</span>
+                  <span className="font-mono text-rose">{formatNaira(totalOutstanding, true)}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground">Paid</span>
+                  <span className="font-mono text-emerald">{formatNaira(totalRevenue, true)}</span>
+                </div>
               </div>
               <div className="mt-5 rounded-lg border border-border/50 bg-background/40 p-3">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-muted-foreground">Net Profit Margin</span>
+                  <span className="font-medium text-muted-foreground">Collection Rate</span>
                   <span className="flex items-center gap-1 font-mono font-semibold text-emerald">
                     <TrendingUp className="h-3 w-3" />
-                    32%
+                    {collectionRate}%
                   </span>
                 </div>
               </div>
@@ -301,49 +314,53 @@ function FinancePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {filteredTxns.map((txn, idx) => (
-                <motion.div
-                  key={txn.id}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="flex items-center gap-4 rounded-xl border border-border/50 bg-background/40 px-4 py-3 transition-colors hover:bg-accent/30"
-                >
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                    txn.type === 'payment' ? 'bg-emerald/10' : 'bg-amber/10'
-                  }`}>
-                    {txn.type === 'payment'
-                      ? <ArrowDownRight className="h-4 w-4 text-emerald" />
-                      : <CreditCard className="h-4 w-4 text-amber" />
-                    }
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{txn.customer}</span>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${
-                          txn.status === 'confirmed' ? 'border-emerald/40 text-emerald' :
-                          txn.status === 'pending' ? 'border-amber/40 text-amber' :
-                          'border-rose/40 text-rose'
-                        }`}
-                      >
-                        {txn.status}
-                      </Badge>
+              {allTxns.map((txn, idx) => {
+                const isPayment = txn.amount_paid !== undefined || txn.status === 'confirmed';
+                const displayName = txn.customers?.name || txn.customer_name || 'Unknown';
+                return (
+                  <motion.div
+                    key={txn.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="flex items-center gap-4 rounded-xl border border-border/50 bg-background/40 px-4 py-3 transition-colors hover:bg-accent/30"
+                  >
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                      isPayment ? 'bg-emerald/10' : 'bg-amber/10'
+                    }`}>
+                      {isPayment
+                        ? <ArrowDownRight className="h-4 w-4 text-emerald" />
+                        : <CreditCard className="h-4 w-4 text-amber" />
+                      }
                     </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{txn.method}</span>
-                      <span>·</span>
-                      <span>{txn.date}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">{displayName}</span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            txn.status === 'confirmed' || txn.status === 'paid' ? 'border-emerald/40 text-emerald' :
+                            txn.status === 'pending' ? 'border-amber/40 text-amber' :
+                            'border-rose/40 text-rose'
+                          }`}
+                        >
+                          {txn.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{txn.method || txn.payment_method || 'Bank'}</span>
+                        <span>·</span>
+                        <span>{txn.date || txn.created_at ? new Date(txn.created_at || txn.date).toLocaleDateString() : ''}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className={`text-right font-mono text-sm font-semibold ${
-                    txn.type === 'payment' ? 'text-emerald' : 'text-foreground'
-                  }`}>
-                    {txn.type === 'payment' ? '+' : ''}{formatNaira(txn.amount, true)}
-                  </div>
-                </motion.div>
-              ))}
+                    <div className={`text-right font-mono text-sm font-semibold ${
+                      isPayment ? 'text-emerald' : 'text-foreground'
+                    }`}>
+                      {isPayment ? '+' : ''}{formatNaira(('total' in txn ? txn.total : txn.amount) || 0, true)}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -358,8 +375,8 @@ function FinancePage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {CUSTOMERS.filter(c => c.outstandingBalance > 0).sort((a, b) => b.outstandingBalance - a.outstandingBalance).map((customer, idx) => {
-                const pct = (customer.outstandingBalance / totalOutstanding) * 100;
+              {customers.filter((c: Customer) => c.outstandingBalance > 0).sort((a: Customer, b: Customer) => b.outstandingBalance - a.outstandingBalance).map((customer: Customer, idx: number) => {
+                const pct = totalOutstanding > 0 ? (customer.outstandingBalance / totalOutstanding) * 100 : 0;
                 return (
                   <motion.div
                     key={customer.id}

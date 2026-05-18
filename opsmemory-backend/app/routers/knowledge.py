@@ -43,6 +43,7 @@ class CatalogItemRequest(BaseModel):
     unit: Optional[str] = None
     sku: Optional[str] = None
     available: bool = True
+    image_url: Optional[str] = None
 
 
 class FAQRequest(BaseModel):
@@ -86,6 +87,7 @@ async def add_catalog_item(
         unit=body.unit,
         sku=body.sku,
         available=body.available,
+        image_url=body.image_url,
     )
     return {"id": entry_id, "message": "Catalog item added successfully"}
 

@@ -19,7 +19,6 @@ from app.services.extraction import (
     extract_from_text,
     extract_from_image,
     transcribe_voice_note,
-    generate_customer_response,
 )
 from app.services.entity_matching import resolve_customer
 from app.database import (
@@ -32,13 +31,6 @@ from app.database import (
     get_business_customers,
     create_customer,
 )
-from app.services.agents.collections_agent import CollectionsAgent
-from app.services.agents.churn_agent import ChurnAgent
-from app.services.agents.deal_agent import DealAgent
-from app.services.agents.fulfillment_agent import FulfillmentAgent
-from app.services.agents.revenue_pulse_agent import RevenuePulseAgent
-from app.services.agents.relationship_agent import RelationshipHealthAgent
-
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 logger = logging.getLogger(__name__)
 
@@ -77,15 +69,20 @@ async def receive_meta_message(
     """
     body = await request.body()
 
-    # HMAC signature verification
+    # HMAC signature verification (uses Meta App Secret, not the access token)
     signature = request.headers.get("X-Hub-Signature-256", "")
-    expected = "sha256=" + hmac.new(
-        settings.meta_whatsapp_token.encode(),
-        body,
-        hashlib.sha256,
-    ).hexdigest()
-    if not hmac.compare_digest(signature, expected):
-        raise HTTPException(status_code=401, detail="Invalid signature")
+    if signature and settings.meta_app_secret:
+        expected = "sha256=" + hmac.new(
+            settings.meta_app_secret.encode(),
+            body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            raise HTTPException(status_code=401, detail="Invalid signature")
+    elif signature and not settings.meta_app_secret:
+        logger.warning(
+            "META_APP_SECRET not set — skipping webhook signature verification"
+        )
 
     payload = json.loads(body)
     background_tasks.add_task(process_meta_message, business_id, payload)
@@ -153,6 +150,7 @@ async def process_meta_message(business_id: str, payload: dict):
             media_url=media_url,
             image_context=image_context,
             whatsapp_msg_id=whatsapp_msg_id,
+            inbound_channel="meta",
         )
 
     except Exception as e:
@@ -173,10 +171,19 @@ async def receive_twilio_message(
     """
     Receives WhatsApp messages via Twilio sandbox.
     Used during development. No HMAC verification needed for sandbox.
+
+    Configure in Twilio Console → Messaging → Try WhatsApp → Sandbox settings:
+    When a message comes in → POST {BASE_URL}/webhook/twilio/{business_id}
     """
     form_data = await request.form()
     sender_phone = str(form_data.get("From", "")).replace("whatsapp:", "")
     body = str(form_data.get("Body", ""))
+    logger.info(
+        "Twilio inbound for business %s from %s: %s",
+        business_id,
+        sender_phone,
+        (body or "")[:80],
+    )
     media_url = form_data.get("MediaUrl0")
     media_type = str(form_data.get("MediaContentType0", ""))
     msg_sid = str(form_data.get("MessageSid", ""))
@@ -204,6 +211,7 @@ async def receive_twilio_message(
         media_url=str(media_url) if media_url else None,
         image_context=image_context,
         whatsapp_msg_id=msg_sid,
+        inbound_channel="twilio",
     )
 
     return PlainTextResponse("", status_code=200)
@@ -219,6 +227,7 @@ async def process_incoming_message(
     media_url: str,
     image_context: dict,
     whatsapp_msg_id: str,
+    inbound_channel: str = "twilio",
 ):
     """
     The core pipeline. Runs for every incoming message regardless of source.
@@ -269,10 +278,19 @@ async def process_incoming_message(
         "unread_count": conversation.get("unread_count", 0) + 1,
     }).eq("id", conversation["id"]).execute()
 
-    # ── STEP 5: Update customer state ────────────────────────────────────
+    # ── STEP 5: Update customer metrics & state ─────────────────────────
+    from app.services.customer_metrics import refresh_customer_metrics
+
+    customer = await refresh_customer_metrics(business_id, customer["id"]) or customer
+
     customer_updates = {"last_contact_at": "now()"}
     if extracted.language:
-        customer_updates["language"] = extracted.language.value
+        lang_val = (
+            extracted.language.value
+            if hasattr(extracted.language, "value")
+            else str(extracted.language)
+        )
+        customer_updates["language"] = lang_val
     supabase.table("customers").update(customer_updates) \
         .eq("id", customer["id"]) \
         .eq("business_id", business_id) \
@@ -297,7 +315,6 @@ async def process_incoming_message(
             "agent_name": None,
         })
 
-    # ── STEP 7: Run ALL 6 agents ─────────────────────────────────────────
     recent_messages = (
         supabase.table("messages")
         .select("*")
@@ -307,58 +324,45 @@ async def process_incoming_message(
         .execute()
         .data
     )
+    recent_messages = list(reversed(recent_messages))
 
-    agents = [
-        CollectionsAgent(business_id, business),
-        ChurnAgent(business_id, business),
-        DealAgent(business_id, business),
-        FulfillmentAgent(business_id, business),
-        RevenuePulseAgent(business_id, business),
-        RelationshipHealthAgent(business_id, business),
-    ]
-    for agent in agents:
-        try:
-            await agent.evaluate(customer, extracted, recent_messages)
-        except Exception as e:
-            logger.error(f"Agent {agent.name} error: {e}", exc_info=True)
+    # ── STEP 7–8: Agent orchestration + reply ─────────────────────────────
+    from app.services.agent_orchestrator import orchestrate_reply
+    from app.services.whatsapp import send_whatsapp_message, send_whatsapp_image
 
-    # ── STEP 8: Auto-respond if enabled ──────────────────────────────────
-    auto_reply_intents = [
-        "order_request",
-        "price_inquiry",
-        "general_inquiry",
-        "delivery_inquiry",
-        "greeting",
-    ]
-    if (
-        business.get("auto_reply_enabled")
-        and extracted.intent in auto_reply_intents
-    ):
-        response_text = await generate_customer_response(
-            business_id=business_id,
-            business_name=business["name"],
-            business_type=business["type"],
-            customer_name=customer["name"],
-            language=extracted.language,
-            conversation_history=recent_messages,
-            agent_recommendation="Respond helpfully and professionally.",
-            extracted_data=extracted,
-            customer=customer,
-        )
-        from app.services.whatsapp import send_whatsapp_message
+    result = await orchestrate_reply(
+        business_id=business_id,
+        business=business,
+        customer=customer,
+        extracted=extracted,
+        messages=recent_messages,
+        last_inbound=raw_content,
+    )
 
-        await send_whatsapp_message(
-            business=business,
-            to_phone=sender_phone,
-            message=response_text,
-        )
-        # Store the outbound message
+    if result.should_send and result.text:
+        if result.image_url:
+            await send_whatsapp_image(
+                business=business,
+                to_phone=sender_phone,
+                image_url=result.image_url,
+                caption=result.text[:1024],
+                reply_channel=inbound_channel,
+            )
+        else:
+            await send_whatsapp_message(
+                business=business,
+                to_phone=sender_phone,
+                message=result.text,
+                reply_channel=inbound_channel,
+            )
         await insert_message({
             "business_id": business_id,
             "conversation_id": conversation["id"],
             "customer_id": customer["id"],
             "direction": "outbound",
-            "content": response_text,
-            "media_type": "text",
-            "sent_by": None,  # Auto-sent
+            "content": result.text,
+            "media_type": "image" if result.image_url else "text",
+            "media_url": result.image_url,
+            "sent_by": None,
+            "sent_by_agent": result.lead_agent,
         })

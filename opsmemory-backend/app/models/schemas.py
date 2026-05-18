@@ -17,6 +17,7 @@ class Language(str, Enum):
     pidgin = "pidgin"
     yoruba = "yoruba"
     igbo = "igbo"
+    hausa = "hausa"
 
 
 class ChurnRisk(str, Enum):

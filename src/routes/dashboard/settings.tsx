@@ -21,9 +21,15 @@ import {
 } from 'lucide-react';
 import { fadeUp, staggerContainer } from '@/lib/motion-variants';
 import { useTheme } from '@/store/useTheme';
-import { BUSINESS_NAME } from '@/lib/mock-data';
+import { api } from '@/lib/api';
+import { mapBusiness } from '@/lib/api-mappers';
+import type { Business } from '@/types';
 
 export const Route = createFileRoute('/dashboard/settings')({
+  loader: async () => {
+    const raw = await api.get('/api/onboarding/business');
+    return { business: mapBusiness(raw) };
+  },
   component: SettingsPage,
 });
 
@@ -41,6 +47,7 @@ function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const isDark = useTheme((s) => s.isDark);
   const toggle = useTheme((s) => s.toggle);
+  const { business } = Route.useLoaderData();
 
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-4 py-4 sm:px-8 sm:py-6">
@@ -48,7 +55,7 @@ function SettingsPage() {
         <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">settings · config</div>
         <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Configure {BUSINESS_NAME}&apos;s OpsMemory dashboard preferences
+          Configure {business.name}&apos;s OpsMemory dashboard preferences
         </p>
       </motion.header>
 
@@ -71,7 +78,7 @@ function SettingsPage() {
 
       {/* Tab Content */}
       <motion.div key={activeTab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="mt-6 mb-8 space-y-6">
-        {activeTab === 'general' && <GeneralTab isDark={isDark} toggleTheme={toggle} />}
+        {activeTab === 'general' && <GeneralTab business={business} isDark={isDark} toggleTheme={toggle} />}
         {activeTab === 'notifications' && <NotificationsTab />}
         {activeTab === 'agents' && <AgentsTab />}
         {activeTab === 'integrations' && <IntegrationsTab />}
@@ -95,7 +102,7 @@ function Toggle({ enabled, onToggle, label, desc }: { enabled: boolean; onToggle
 }
 
 /* ─── General Tab ─── */
-function GeneralTab({ isDark, toggleTheme }: { isDark: boolean; toggleTheme: () => void }) {
+function GeneralTab({ business, isDark, toggleTheme }: { business: Business; isDark: boolean; toggleTheme: () => void }) {
   return (
     <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="space-y-6">
       {/* Business Info */}
@@ -111,15 +118,15 @@ function GeneralTab({ isDark, toggleTheme }: { isDark: boolean; toggleTheme: () 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Business Name</label>
-                <input defaultValue={BUSINESS_NAME} className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <input defaultValue={business.name} className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               <div>
                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Industry</label>
-                <input defaultValue="Agricultural Supplies" className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <input defaultValue={business.type} className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               <div>
                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">WhatsApp Number</label>
-                <input defaultValue="+234 803 123 4567" className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                <input defaultValue={business.whatsappNumber || '+234'} className="w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
               </div>
               <div>
                 <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Time Zone</label>

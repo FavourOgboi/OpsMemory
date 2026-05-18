@@ -15,12 +15,17 @@ The flow:
 from openai import AsyncOpenAI
 from app.config import settings
 from app.database import supabase
+from app.services.llm_client import get_llm_client
 from typing import List, Dict, Optional
 import logging
 import re
+import math
 
 logger = logging.getLogger(__name__)
-client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+def _get_embed_client() -> AsyncOpenAI:
+    """Embeddings via OpenRouter."""
+    return get_llm_client("cheap")
 
 
 # ── EMBEDDING ─────────────────────────────────────────────────────────────────
@@ -32,8 +37,8 @@ async def embed_text(text: str) -> List[float]:
     Output: list of 1536 floats.
     Cost: $0.02 per million tokens — embedding an entire catalog costs cents.
     """
-    response = await client.embeddings.create(
-        model="text-embedding-3-small",
+    response = await _get_embed_client().embeddings.create(
+        model=settings.openrouter_embedding_model,
         input=text.strip(),
     )
     return response.data[0].embedding
@@ -133,6 +138,7 @@ async def store_catalog_item(
     unit: str = None,
     sku: str = None,
     available: bool = True,
+    image_url: str = None,
 ) -> str:
     """
     Stores a single product or service catalog item.
@@ -146,17 +152,21 @@ async def store_catalog_item(
     if sku:
         content += f" SKU: {sku}."
 
+    meta = {
+        "price": price,
+        "unit": unit,
+        "sku": sku,
+        "available": available,
+    }
+    if image_url:
+        meta["image_url"] = image_url
+
     return await store_knowledge_entry(
         business_id=business_id,
         content=content,
         category="catalog",
         title=name,
-        metadata={
-            "price": price,
-            "unit": unit,
-            "sku": sku,
-            "available": available,
-        },
+        metadata=meta,
     )
 
 
@@ -198,6 +208,43 @@ async def store_policy(
 
 # ── RETRIEVAL ─────────────────────────────────────────────────────────────────
 
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+async def _retrieve_knowledge_local(
+    business_id: str,
+    query_embedding: List[float],
+    top_k: int,
+    threshold: float,
+) -> List[Dict]:
+    """Vector search using JSONB-stored embeddings (local PostgreSQL / no pgvector RPC)."""
+    result = (
+        supabase.table("knowledge_base")
+        .select("id, content, category, title, embedding")
+        .eq("business_id", business_id)
+        .eq("active", True)
+        .execute()
+    )
+    scored: List[tuple[float, Dict]] = []
+    for row in result.data or []:
+        emb = row.get("embedding")
+        if not emb:
+            continue
+        score = _cosine_similarity(query_embedding, emb)
+        if score >= threshold:
+            scored.append((score, row))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [row for _, row in scored[:top_k]]
+
+
 async def retrieve_relevant_knowledge(
     business_id: str,
     query: str,
@@ -217,15 +264,23 @@ async def retrieve_relevant_knowledge(
 
     query_embedding = await embed_text(query)
 
-    # Call the Supabase match_knowledge function
-    result = supabase.rpc("match_knowledge", {
-        "query_embedding": query_embedding,
-        "target_business_id": business_id,
-        "match_threshold": threshold,
-        "match_count": top_k,
-    }).execute()
+    try:
+        result = supabase.rpc("match_knowledge", {
+            "query_embedding": query_embedding,
+            "target_business_id": business_id,
+            "match_threshold": threshold,
+            "match_count": top_k,
+        }).execute()
+        if result.data:
+            return result.data
+    except NotImplementedError:
+        pass
+    except Exception as exc:
+        logger.warning("match_knowledge RPC failed, using local search: %s", exc)
 
-    return result.data if result.data else []
+    return await _retrieve_knowledge_local(
+        business_id, query_embedding, top_k, threshold
+    )
 
 
 def format_knowledge_for_prompt(knowledge_chunks: List[Dict]) -> str:

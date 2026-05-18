@@ -16,6 +16,7 @@ from app.database import supabase
 from app.services.email_service import send_ceo_digest
 from app.services.agents.collections_agent import CollectionsAgent
 from app.services.agents.churn_agent import ChurnAgent
+from app.services.agents.deal_agent import DealAgent
 from app.services.agents.fulfillment_agent import FulfillmentAgent
 from app.services.agents.revenue_pulse_agent import RevenuePulseAgent
 from app.services.agents.relationship_agent import RelationshipHealthAgent
@@ -69,6 +70,7 @@ async def run_agent_sweep():
         agents = [
             CollectionsAgent(biz["id"], biz),
             ChurnAgent(biz["id"], biz),
+            DealAgent(biz["id"], biz),
             FulfillmentAgent(biz["id"], biz),
             RevenuePulseAgent(biz["id"], biz),
             RelationshipHealthAgent(biz["id"], biz),
@@ -83,6 +85,14 @@ async def run_agent_sweep():
                         f"Agent sweep error — {agent.name} for "
                         f"customer {customer.get('id')}: {e}"
                     )
+
+        # Business-level revenue and pipeline checks
+        try:
+            rp_agent = RevenuePulseAgent(biz["id"], biz)
+            await rp_agent.check_business_revenue_health(biz["id"])
+            await rp_agent.check_pipeline_health(biz["id"])
+        except Exception as e:
+            logger.error(f"RevenuePulse business-level check error for {biz['id']}: {e}")
 
 
 async def run_campaign_continuations():
@@ -133,6 +143,8 @@ async def run_campaign_continuations():
                 agent = CollectionsAgent(business_id, {})
             elif agent_name == "Churn":
                 agent = ChurnAgent(business_id, {})
+            elif agent_name == "Deal":
+                agent = DealAgent(business_id, {})
             else:
                 logger.warning(f"Unknown agent type: {agent_name}")
                 continue

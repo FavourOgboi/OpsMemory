@@ -127,3 +127,129 @@ class RelationshipHealthAgent(BaseAgent):
                     confidence=0.78,
                     track="assign",
                 )
+                return
+
+        # ── Trigger 4: Complaint resolved but no order within 7 days ─────────
+        await self._check_complaint_resolution_gap(customer)
+
+        # ── Trigger 5: Order frequency anomaly ────────────────────────────────
+        await self._check_order_frequency_anomaly(customer)
+
+    async def _check_complaint_resolution_gap(self, customer: Dict) -> None:
+        """
+        If a complaint was resolved but no new order placed within 7 days,
+        propose a check-in to ensure satisfaction.
+        """
+        from datetime import datetime, timedelta, timezone
+        if await self._has_pending(customer["id"]):
+            return
+
+        # Find most recent resolved complaint event
+        complaint_event = supabase.table("live_events") \
+            .select("*") \
+            .eq("business_id", self.business_id) \
+            .eq("customer_id", customer["id"]) \
+            .eq("event_type", "complaint_resolved") \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+
+        if not complaint_event.data:
+            return
+
+        resolved_at = datetime.fromisoformat(complaint_event.data[0]["created_at"].replace("Z", "+00:00"))
+        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+
+        if resolved_at < seven_days_ago:
+            return  # Too old
+
+        # Check if any order since resolution
+        orders_since = supabase.table("orders") \
+            .select("id") \
+            .eq("business_id", self.business_id) \
+            .eq("customer_id", customer["id"]) \
+            .gt("created_at", resolved_at.isoformat()) \
+            .limit(1) \
+            .execute()
+
+        if orders_since.data:
+            return  # Order placed since resolution
+
+        await self.propose_action(
+            customer=customer,
+            trigger_summary=(
+                f"Complaint for {customer.get('name')} was resolved but no new order "
+                f"placed in the last 7 days. Check-in recommended."
+            ),
+            proposed_action=(
+                f"Send satisfaction check-in to {customer.get('name')} after complaint resolution."
+            ),
+            proposed_message=(
+                f"Hi {customer.get('name', 'there')}, I hope the issue we resolved last week "
+                f"hasn't caused any further problems. Is there anything else we can help with?"
+            ),
+            risk_level="low",
+            confidence=0.75,
+            track="assign",
+        )
+
+    async def _check_order_frequency_anomaly(self, customer: Dict) -> None:
+        """
+        If a customer's average order frequency drops by >40% over the last 30 days
+        vs their lifetime average, propose action before churn agent catches it.
+        """
+        from datetime import datetime, timedelta, timezone
+        if await self._has_pending(customer["id"]):
+            return
+
+        total_revenue = customer.get("total_revenue", 0)
+        if total_revenue < 100000:
+            return
+
+        now = datetime.now(timezone.utc)
+        thirty_days_ago = (now - timedelta(days=30)).isoformat()
+        sixty_days_ago = (now - timedelta(days=60)).isoformat()
+
+        # Orders in last 30 days
+        recent_orders = supabase.table("orders") \
+            .select("created_at") \
+            .eq("business_id", self.business_id) \
+            .eq("customer_id", customer["id"]) \
+            .gte("created_at", thirty_days_ago) \
+            .execute()
+
+        # Orders in previous 30 days
+        prior_orders = supabase.table("orders") \
+            .select("created_at") \
+            .eq("business_id", self.business_id) \
+            .eq("customer_id", customer["id"]) \
+            .gte("created_at", sixty_days_ago) \
+            .lt("created_at", thirty_days_ago) \
+            .execute()
+
+        recent_count = len(recent_orders.data)
+        prior_count = len(prior_orders.data)
+
+        if prior_count > 0:
+            drop_pct = (prior_count - recent_count) / prior_count
+            if drop_pct > 0.40:
+                await self.propose_action(
+                    customer=customer,
+                    trigger_summary=(
+                        f"{customer.get('name')}'s order frequency dropped {drop_pct*100:.0f}% "
+                        f"in the last 30 days ({recent_count} vs {prior_count} prior). "
+                        f"Early relationship warning."
+                    ),
+                    proposed_action=(
+                        f"Proactively reach out to {customer.get('name')} to understand "
+                        f"the drop in order frequency."
+                    ),
+                    proposed_message=(
+                        f"Hi {customer.get('name', 'there')}, we noticed you've been ordering "
+                        f"a bit less lately. Just wanted to check if everything is okay or if "
+                        f"there's anything we can improve. Your feedback means a lot to us."
+                    ),
+                    risk_level="medium",
+                    confidence=0.80,
+                    track="assign",
+                )

@@ -1,0 +1,87 @@
+# OpsMemory — Cursor agent instructions
+
+Granular rules live in `.cursor/rules/*.mdc`; this file is the portable summary. Prefer matching existing patterns over drive-by refactors.
+
+---
+
+## Product (Doc 1 — May 2026)
+
+**Pitch:** Businesses already run on WhatsApp. OpsMemory turns those conversations into the operational brain the business never had.
+
+**Not:** Personal WhatsApp surveillance; not “only a chatbot.” **Yes:** Dedicated WhatsApp Business number → ingest → extraction → durable memory → agents → dashboard / WhatsApp / CEO email.
+
+**Five layers:** Input (WhatsApp MVP) → Extraction → Memory → Agents → Output.
+
+**Routing tracks:** **Auto** (routine, logged; owner may disable) → **Assign** (staff, below threshold) → **Escalate** (CEO / deal threshold).
+
+**Six agents:** Collections, Fulfillment, Churn detection, Deal intelligence, Revenue pulse, Relationship health. **Hackathon MVP emphasis:** Collections + Churn + Deal (≥3 agents); roles strip CEO / Sales / Finance first.
+
+**Tenancy:** One pairing code ↔ one workspace; strict `business_id` isolation everywhere.
+
+---
+
+## Repo layout
+
+| Area | Path |
+|------|------|
+| Frontend | TanStack Start + React 19 + Vite 7, `src/` |
+| Backend | `opsmemory-backend/` FastAPI `main.py` |
+| SSR / Workers | `src/server.ts`, `wrangler.jsonc` → `main`: `src/server.ts` |
+
+**Vite:** `vite.config.ts` uses **only** `@lovable.dev/vite-tanstack-config`. Do **not** add duplicate TanStack/React/Tailwind/Cloudflare plugins (breaks build).
+
+**Aliases:** `@/*` → `src/*`. TypeScript ES2022, strict, bundler resolution.
+
+**UI:** shadcn **new-york**, Lucide, Tailwind v4 + CSS variables (`components.json`, `src/styles.css`).
+
+---
+
+## Frontend — critical
+
+- **Demo mode:** `ClerkProvider` commented in `src/routes/__root.tsx`; `dashboard` auth server fn always succeeds. Stores seed from `src/lib/mock-data.ts` — not live SSE yet.
+- Routes under `src/routes/` (file-based); dashboard shell `Sidebar`, `DashboardTopBar`.
+- Zustand: `useAgentStatus`, `useEventStream`, `useApprovalQueue`, `useTheme`.
+- Production path: re-enable Clerk, real guards, wire TanStack Query/fetchers to `/api`.
+
+---
+
+## Backend — critical
+
+- **Run:** `uvicorn main:app --reload --port 8000` from `opsmemory-backend/`.
+- **Routers:** `/webhook/*` (Meta + Twilio) unscoped prefix; **`/api`** for authenticated REST (conversations, customers, approvals, analytics, chat, voice, passport, onboarding, knowledge).
+- **Auth:** Clerk JWT via `app/auth.py`; dev mode may skip signature verification — tighten for prod.
+- **DB:** Supabase service role — **always scope queries by `business_id`** (RLS bypassed).
+- **Pipeline:** `webhook.py` → extract → `resolve_customer` → persist → agents → optional reply (see `process_incoming_message`).
+- **Agents:** subclass `BaseAgent`; `propose_action` → `agent_actions` + `live_events`. **Deal agent** runs on webhook path but is **not** in the 30-min scheduler sweep list.
+- **Campaigns:** slugs `"Collections"` / `"Churn"` in DB for continuations vs display names like `"Collections Agent"` elsewhere — keep consistent when extending.
+- **Jobs (Africa/Lagos):** morning digest 7:00; agent sweep every 30 min; campaign continuations every 4 h.
+
+---
+
+## Data model (migrations)
+
+Core tables: `businesses`, `business_users`, `customers`, `conversations`, `messages`, `live_events`, `agent_actions`, `orders`, `voice_sessions`; campaigns: `agent_campaigns`, `campaign_log`.
+
+**Gap:** `knowledge_base` (+ pgvector) used in code — confirm DDL in Supabase if missing from repo migrations.
+
+---
+
+## Environment
+
+Backend `.env` via `app/config.py`: Supabase, OpenAI, Clerk, Meta WhatsApp, Twilio, ElevenLabs, SMTP, `app_env`, `base_url`, `secret_key`.
+
+Frontend: `VITE_CLERK_*` when Clerk on.
+
+---
+
+## Code discipline (project)
+
+- Touch only files needed for the task; match naming, imports, and component style already in tree.
+- Do not create git commits unless the user asks.
+
+---
+
+## Skills (optional workflows)
+
+- `.cursor/skills/opsmemory-build-alignment/` — feature work vs architecture & MVP.
+- `.cursor/skills/opsmemory-hackathon-demo/` — demo narrative and timing.

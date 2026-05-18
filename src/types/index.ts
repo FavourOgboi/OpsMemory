@@ -115,6 +115,18 @@ export interface AgentState {
   lastTriggered: string | null;
 }
 
+export interface Business {
+  id: string;
+  name: string;
+  type: string;
+  whatsappNumber: string;
+  whatsappConnected: boolean;
+  autoReplyEnabled: boolean;
+  dealApprovalThreshold: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BusinessMetrics {
   revenueThisWeek: number;
   outstandingTotal: number;

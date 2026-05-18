@@ -14,8 +14,9 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
-import { BUSINESS_NAME, getAlertTarget } from '@/lib/mock-data';
+import { useEffect, useState } from 'react';
+import { getAlertTarget } from '@/lib/mock-data';
+import { api } from '@/lib/api';
 import { useAgentStatus } from '@/store/useAgentStatus';
 import { useApprovalQueue } from '@/store/useApprovalQueue';
 import { useEventStream } from '@/store/useEventStream';
@@ -43,6 +44,13 @@ export function Sidebar() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [businessName, setBusinessName] = useState('Bola Agro Supplies Ltd');
+
+  useEffect(() => {
+    api.get('/api/onboarding/business').then((b) => {
+      if (b?.name) setBusinessName(b.name);
+    }).catch(() => {});
+  }, []);
   const agents = useAgentStatus((state) => state.agents);
   const pendingCount = useApprovalQueue((state) => state.pendingCount);
   const events = useEventStream((state) => state.events);
@@ -59,7 +67,7 @@ export function Sidebar() {
         {!collapsed && (
           <div className="min-w-0">
             <div className="truncate font-display text-sm font-semibold tracking-tight">OpsMemory</div>
-            <div className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{BUSINESS_NAME}</div>
+            <div className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{businessName}</div>
           </div>
         )}
       </Link>

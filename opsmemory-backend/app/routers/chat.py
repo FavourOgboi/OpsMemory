@@ -4,16 +4,14 @@ OpsMemory — Intelligence Chat Router
 Natural language query against business memory. Role-based scope filtering.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.auth import get_current_user
 from app.database import supabase
 from app.models.schemas import ChatQueryRequest, ChatQueryResponse
-from openai import AsyncOpenAI
-from app.config import settings
-import json
+from app.json_utils import json_dumps_safe
+from app.services.llm_client import get_llm_client, resolve_model
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 ROLE_SCOPE = {
     "ceo": "You can see everything: all customers, all finances, all agents, all staff performance.",
@@ -45,12 +43,26 @@ async def query_intelligence(body: ChatQueryRequest, user: dict = Depends(get_cu
 The user is a {role}. {ROLE_SCOPE.get(role, "")}
 Answer their question using the data provided. Be concise. Give the direct answer first, then supporting detail.
 Format numbers in Nigerian Naira: ₦150,000 (not 150000). If the data is not available, say so honestly.
-Business data: {json.dumps(context, indent=2)}"""
+Business data: {json_dumps_safe(context, indent=2)}"""
 
-    response = await client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": body.question}],
-        max_tokens=200,
-        temperature=0.3,
+    try:
+        client = get_llm_client("cheap")
+        response = await client.chat.completions.create(
+            model=resolve_model("cheap"),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": body.question},
+            ],
+            max_tokens=200,
+            temperature=0.3,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Intelligence chat unavailable: {exc}",
+        ) from exc
+
+    return ChatQueryResponse(
+        answer=response.choices[0].message.content.strip(),
+        table_data=None,
     )
-    return ChatQueryResponse(answer=response.choices[0].message.content.strip(), table_data=None)
