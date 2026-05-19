@@ -49,21 +49,21 @@ export function Step3WhatsApp() {
         💬
       </motion.div>
 
-      <h2 className="text-center text-2xl font-semibold text-[#F8FAFC]">
+      <h2 className="text-center text-2xl font-semibold text-foreground">
         Connect your WhatsApp number.
       </h2>
-      <p className="mt-2 text-center text-sm text-[#94A3B8]">
+      <p className="mt-2 text-center text-sm text-muted-foreground">
         This is the number your customers will message. Your agent will receive and respond to all
         messages on this number.
       </p>
 
       <div className="mt-8 space-y-5">
         <div>
-          <label className="mb-2 block text-sm font-medium text-[#F8FAFC]">
+          <label className="mb-2 block text-sm font-medium text-foreground">
             WhatsApp Business Number <span className="text-[#EF4444]">*</span>
           </label>
           <div className="flex gap-2">
-            <div className="flex w-20 items-center justify-center rounded-xl border border-[#334155] bg-[#1E293B] text-sm text-[#94A3B8]">
+            <div className="flex w-20 items-center justify-center rounded-xl border border-border bg-background text-sm text-muted-foreground">
               +234
             </div>
             <input
@@ -72,7 +72,7 @@ export function Step3WhatsApp() {
               onChange={(e) => setField('whatsappNumber', e.target.value)}
               placeholder="801 234 5678"
               disabled={whatsappConnected}
-              className="flex-1 rounded-xl border border-[#334155] bg-[#1E293B] px-4 py-3.5 text-sm text-[#F8FAFC] placeholder-[#475569] transition-colors duration-150 focus:border-emerald-500 focus:outline-none disabled:opacity-50"
+              className="flex-1 rounded-xl border border-border bg-background px-4 py-3.5 text-sm text-foreground placeholder-muted-foreground transition-colors duration-150 focus:border-emerald-500 focus:outline-none disabled:opacity-50"
             />
           </div>
         </div>
@@ -102,7 +102,7 @@ export function Step3WhatsApp() {
 
             <button
               onClick={() => setField('whatsappNumber', '')}
-              className="w-full rounded-xl border border-[#334155] py-3 text-sm text-[#94A3B8] transition hover:text-white hover:border-[#475569]"
+              className="w-full rounded-xl border border-border py-3 text-sm text-muted-foreground transition hover:text-white hover:border-border"
             >
               Skip — connect later in Settings
             </button>
@@ -117,7 +117,7 @@ export function Step3WhatsApp() {
               <span className="text-lg">✅</span>
               <span className="text-sm font-medium">Connected — {whatsappNumber}</span>
             </div>
-            <p className="mt-1 text-xs text-[#94A3B8]">
+            <p className="mt-1 text-xs text-muted-foreground">
               Messages to this number will now be processed by your OpsMemory agent.
             </p>
           </motion.div>

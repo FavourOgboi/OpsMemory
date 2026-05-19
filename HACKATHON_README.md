@@ -300,3 +300,51 @@ Based on the rubric, here's what separates winners from everyone else:
 - 🔴 Yelp data = American users — Nigerian contextualization is prompt-level only
 - 🔴 Cross-domain is keyword-based, not semantic
 - 🟡 NDCG@10 not implemented (only Hit Rate)
+
+---
+
+## 🎯 What the System Must Do Before Submission (MVP Checklist)
+To win this hackathon, we must ensure the following core functionalities are fully working and presentable before the deadline:
+
+### 1. Seamless WhatsApp Number Integration
+- **Functionality:** When a business registers their WhatsApp number with our system via the WhatsApp Business API, **anyone** who messages that number must instantly get a response from the OpsMemory AI agent.
+- **Goal:** Prove the AI acts as a 24/7 customer service and sales representative using the specific business context.
+
+### 2. Media Handling (Images & Voice Notes)
+- **Voice Notes:** If a customer sends a voice note, the system must use audio transcription (e.g., Whisper) to convert it to text, process the intent, and reply. The dashboard must display a playable audio element alongside the text.
+- **Images:** If a customer sends a picture (e.g., "Do you have this exact shoe?"), the system must process it via a Vision AI (e.g., GPT-4o Vision), compare it against the product catalog, and respond appropriately. The dashboard must display the actual image received.
+
+### 3. Real-Time Dashboard Updates
+- **Functionality:** When a brand-new customer messages the WhatsApp number for the first time, the system must automatically create a new customer profile in the database.
+- **Live Sync:** The dashboard must update instantly (via WebSockets or polling) to show the new customer in the sidebar. The business owner must be able to click their name and watch the AI chatting with them *live* without refreshing the page.
+
+### 4. The Yelp Dataset Benchmark
+- **The "Why":** Real businesses will NOT use Yelp data (they will upload their own catalogs). However, for the Hackathon's strict rubric (Task A & Task B), we must use the massive 5.3GB Yelp dataset as a "stress test".
+- **Goal:** By proving our recommendation engine and review intelligence can handle millions of complex Yelp reviews flawlessly, we show the judges that our system can easily scale and recommend a local business's specific products. This is strictly our proof-of-concept for the hackathon judging criteria.
+
+---
+
+## 🚀 Future Implementations (Post-MVP Core Features)
+While our hackathon MVP focuses on chat and recommendations, the complete vision for OpsMemory includes:
+- **Automated AI Voice Calls:** Enabling the AI to handle inbound and outbound customer service and sales calls directly.
+- **Payment Verification Integration:** Connecting directly to bank APIs, PayPal, Paystack, or Flutterwave to automatically verify incoming payment alerts and complete orders without human intervention.
+- **Advanced Media Handling:** Allowing the AI to generate images on-the-fly for products and process customer voice notes through real-time transcription.
+
+---
+
+## 👥 Team Task Delegation (Lock-In Plan)
+To ensure we hit our 3-day deadline, responsibilities are split as follows:
+
+### Darious
+- **Focus:** The "Risks" & The Solution Paper
+- **Responsibilities:**
+  - Execute the NLP evaluations (ROUGE-L, RMSE, Hit Rate) to get our real numbers.
+  - Write the 4-8 page Solution Paper (Abstract, Approach, Ablation Studies).
+  - Address and mitigate the risks listed above to ensure maximum points from the judges.
+
+### User
+- **Focus:** Personalization, Authentication & Team Invite Flow
+- **Responsibilities:**
+  - Lock in the multi-tenant architecture to ensure 100% data isolation between businesses.
+  - Finalize the Team Invite logic (when a CEO clicks "Invite", an email is sent, and the invited user is authenticated directly into that specific company's database).
+  - Build out the interfaces and role-based access so invited staff only see what they are supposed to see.

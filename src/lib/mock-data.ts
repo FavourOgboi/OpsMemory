@@ -15,7 +15,7 @@ import type {
   TimelineEvent,
 } from '@/types';
 
-export const BUSINESS_NAME = 'Bola Agro Supplies Ltd';
+export const BUSINESS_NAME = 'Your Business';
 
 export const METRICS: BusinessMetrics = {
   revenueThisWeek: 2400000,
@@ -589,7 +589,7 @@ export const CONVERSATIONS: Conversation[] = [
 export const MOCK_MESSAGES = CONVERSATIONS.flatMap((conversation) => conversation.messages);
 
 export const TIMELINE_EVENTS: TimelineEvent[] = [
-  { id: 't-001', type: 'milestone', title: 'Customer onboarded', description: 'Alhaji Musa Traders joined Bola Agro Supplies', timestamp: '2023-06-12T10:00:00Z' },
+  { id: 't-001', type: 'milestone', title: 'Customer onboarded', description: 'Alhaji Musa Traders joined your business', timestamp: '2023-06-12T10:00:00Z' },
   { id: 't-002', type: 'order', title: 'First order placed', description: 'Order #2401: 20 bags of rice, 10 cartons of oil', timestamp: '2023-06-15T14:30:00Z', amount: 280000 },
   { id: 't-003', type: 'payment', title: 'Payment received', description: 'Full payment for Order #2401', timestamp: '2023-06-18T09:15:00Z', amount: 280000 },
   { id: 't-004', type: 'order', title: 'Recurring order', description: 'Order #2550: 35 bags of rice, 15 cartons of oil', timestamp: '2023-09-20T11:00:00Z', amount: 420000 },

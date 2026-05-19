@@ -48,7 +48,7 @@ export function Sidebar() {
   const path = useRouterState({ select: (state) => state.location.pathname });
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [businessName, setBusinessName] = useState('Bola Agro Supplies Ltd');
+  const [businessName, setBusinessName] = useState('My Business');
 
   useEffect(() => {
     api.get('/api/onboarding/business').then((b) => {

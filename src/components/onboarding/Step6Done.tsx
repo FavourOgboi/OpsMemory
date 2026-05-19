@@ -31,10 +31,10 @@ export function Step6Done() {
       <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
         transition={{ type: 'spring', stiffness: 300, damping: 15 }} className="mb-6 text-6xl">✅</motion.div>
 
-      <h2 className="text-3xl font-semibold text-[#F8FAFC]">You're all set.</h2>
-      <p className="mt-3 text-sm text-[#94A3B8] max-w-sm mx-auto">
-        OpsMemory is now active for <strong className="text-[#F8FAFC]">{businessName || 'your business'}</strong>.
-        {whatsappNumber && <> Your agent is listening on <strong className="text-[#F8FAFC]">{whatsappNumber}</strong>.</>}
+      <h2 className="text-3xl font-semibold text-foreground">You're all set.</h2>
+      <p className="mt-3 text-sm text-muted-foreground max-w-sm mx-auto">
+        OpsMemory is now active for <strong className="text-foreground">{businessName || 'your business'}</strong>.
+        {whatsappNumber && <> Your agent is listening on <strong className="text-foreground">{whatsappNumber}</strong>.</>}
       </p>
 
       <div className="mt-8 space-y-3 text-left max-w-sm mx-auto">
@@ -46,9 +46,9 @@ export function Step6Done() {
         ].map((item, i) => (
           <motion.div key={i} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 + i * 0.1 }}
-            className="flex items-center gap-3 rounded-lg border border-[#1E293B] bg-[#0F172A] px-4 py-3">
+            className="flex items-center gap-3 rounded-lg border border-border bg-muted px-4 py-3">
             <span className="text-lg">{item.icon}</span>
-            <span className="text-sm text-[#94A3B8]">{item.text}</span>
+            <span className="text-sm text-muted-foreground">{item.text}</span>
           </motion.div>
         ))}
       </div>
