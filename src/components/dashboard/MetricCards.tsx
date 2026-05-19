@@ -111,6 +111,7 @@ export function MetricCards() {
           whileHover={{ y: -2 }}
           transition={{ type: 'spring', stiffness: 300, damping: 24 }}
           className="group relative overflow-hidden rounded-2xl border border-border bg-surface/60 p-5 backdrop-blur-sm"
+          data-tour={card.key === 'health' ? 'health-score' : undefined}
         >
           <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-20 blur-2xl" style={{ background: card.color }} />
           <div className="relative">

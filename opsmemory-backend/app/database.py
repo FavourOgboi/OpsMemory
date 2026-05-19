@@ -24,7 +24,7 @@ DB_PARAMS = {
     "user": os.getenv("OPSMEMORY_DB_USER", "postgres"),
     "password": os.getenv("OPSMEMORY_DB_PASSWORD", "postgres"),
     "host": os.getenv("OPSMEMORY_DB_HOST", "localhost"),
-    "port": os.getenv("OPSMEMORY_DB_PORT", "5433"),
+    "port": os.getenv("OPSMEMORY_DB_PORT", "5432"),
 }
 
 
@@ -73,11 +73,14 @@ class _QueryBuilder:
         self._order_by: Optional[str] = None
         self._order_desc = False
         self._limit: Optional[int] = None
+        self._offset: Optional[int] = None
         self._single = False
         self._maybe_single = False
         self._count_mode: Optional[str] = None
         self._insert_data: Optional[Dict] = None
         self._update_data: Optional[Dict] = None
+        self._upsert_data: Optional[Dict] = None
+        self._upsert_conflict_col: Optional[str] = None
         self._delete = False
 
     # ── Chain methods ─────────────────────────────────────────────────────
@@ -126,6 +129,10 @@ class _QueryBuilder:
         self._filters.append(("LIKE", col, val))
         return self
 
+    def ilike(self, col: str, val: str) -> "_QueryBuilder":
+        self._filters.append(("ILIKE", col, val))
+        return self
+
     def in_(self, col: str, vals: list) -> "_QueryBuilder":
         self._filters.append(("IN", col, vals))
         return self
@@ -139,6 +146,10 @@ class _QueryBuilder:
         self._limit = n
         return self
 
+    def offset(self, n: int) -> "_QueryBuilder":
+        self._offset = n
+        return self
+
     def single(self) -> "_QueryBuilder":
         self._single = True
         return self
@@ -149,6 +160,11 @@ class _QueryBuilder:
 
     def insert(self, data: Dict) -> "_QueryBuilder":
         self._insert_data = data
+        return self
+
+    def upsert(self, data: Dict, on_conflict: str = "external_id") -> "_QueryBuilder":
+        self._upsert_data = data
+        self._upsert_conflict_col = on_conflict
         return self
 
     def update(self, data: Dict) -> "_QueryBuilder":
@@ -167,6 +183,8 @@ class _QueryBuilder:
         cur = conn.cursor()
 
         try:
+            if self._upsert_data:
+                return self._run_upsert(cur, conn)
             if self._insert_data:
                 return self._run_insert(cur, conn)
             if self._update_data:
@@ -229,9 +247,11 @@ class _QueryBuilder:
             order_qualified = f'{self.table}."{self._order_by}"' if self._joins else f'"{self._order_by}"'
             sql += f" ORDER BY {order_qualified} {dir_str}"
 
-        # LIMIT
+        # LIMIT / OFFSET
         if self._limit:
             sql += f" LIMIT {self._limit}"
+        if self._offset:
+            sql += f" OFFSET {self._offset}"
 
         cur.execute(sql, params)
         rows = cur.fetchall()
@@ -269,6 +289,23 @@ class _QueryBuilder:
             return _Result(None)
 
         return _Result(serialized)
+
+    def _run_upsert(self, cur, conn) -> _Result:
+        data = {k: _adapt_value(v) for k, v in self._upsert_data.items()}
+        cols = ", ".join(f'"{k}"' for k in data.keys())
+        placeholders = ", ".join(["%s"] * len(data))
+        conflict_col = self._upsert_conflict_col or "external_id"
+        update_clause = ", ".join(
+            f'"{k}" = EXCLUDED."{k}"' for k in data.keys() if k != conflict_col
+        )
+        sql = (
+            f'INSERT INTO {self.table} ({cols}) VALUES ({placeholders}) '
+            f'ON CONFLICT ("{conflict_col}") DO UPDATE SET {update_clause} RETURNING *'
+        )
+        cur.execute(sql, list(data.values()))
+        conn.commit()
+        rows = cur.fetchall()
+        return _Result([_serialize_row(dict(r)) for r in rows])
 
     def _run_insert(self, cur, conn) -> _Result:
         data = {k: _adapt_value(v) for k, v in self._insert_data.items()}
@@ -316,6 +353,9 @@ class _QueryBuilder:
                 placeholders = ", ".join(["%s"] * len(val))
                 parts.append(f'{qualified} IN ({placeholders})')
                 params.extend(val)
+            elif op in ("LIKE", "ILIKE"):
+                parts.append(f'{qualified} {op} %s')
+                params.append(val)
             elif val is None:
                 if op == "=":
                     parts.append(f'{qualified} IS NULL')
@@ -351,7 +391,55 @@ class _RpcBuilder:
     def execute(self) -> _Result:
         if self.fn_name == "match_knowledge":
             return _Result([])
+        if self.fn_name == "match_items":
+            return self._match_items()
         raise NotImplementedError(f"RPC '{self.fn_name}' is not implemented for local PostgreSQL")
+
+    def _match_items(self) -> _Result:
+        """Vector similarity search with pgvector, falls back to popularity ranking."""
+        source = self.params.get("target_source", "yelp")
+        limit = self.params.get("match_count", 10)
+        embedding = self.params.get("query_embedding")
+        conn = _get_conn()
+        conn.rollback()
+        cur = conn.cursor()
+        try:
+            # Try pgvector cosine similarity first
+            if embedding:
+                try:
+                    cur.execute(
+                        """
+                        SELECT id, external_id, name, category, average_stars,
+                               review_count, attributes,
+                               1 - (embedding <=> %s::vector) AS similarity
+                        FROM external_items
+                        WHERE source = %s AND embedding IS NOT NULL
+                        ORDER BY embedding <=> %s::vector
+                        LIMIT %s
+                        """,
+                        [str(embedding), source, str(embedding), limit],
+                    )
+                    rows = cur.fetchall()
+                    if rows:
+                        return _Result([_serialize_row(dict(r)) for r in rows])
+                except Exception:
+                    pass  # pgvector not installed — fall through to popularity
+            # Fallback: popularity ranking
+            cur.execute(
+                """
+                SELECT id, external_id, name, category, average_stars,
+                       review_count, attributes, 0.5::FLOAT AS similarity
+                FROM external_items
+                WHERE source = %s
+                ORDER BY review_count DESC
+                LIMIT %s
+                """,
+                [source, limit],
+            )
+            rows = cur.fetchall()
+            return _Result([_serialize_row(dict(r)) for r in rows])
+        finally:
+            cur.close()
 
 
 class _SupabaseProxy:
@@ -372,8 +460,8 @@ async def get_business_by_id(business_id: str) -> Optional[Dict]:
     return result.data
 
 
-async def get_business_by_owner(clerk_user_id: str) -> Optional[Dict]:
-    result = supabase.table("businesses").select("*").eq("owner_user_id", clerk_user_id).maybeSingle().execute()
+async def get_business_by_owner(app_user_id: str) -> Optional[Dict]:
+    result = supabase.table("businesses").select("*").eq("owner_user_id", app_user_id).maybeSingle().execute()
     return result.data
 
 
@@ -458,8 +546,8 @@ async def has_pending_action(business_id: str, customer_id: str, agent_name: str
 
 # ── Business user helpers ─────────────────────────────────────────────────────
 
-async def get_business_user(business_id: str, clerk_user_id: str) -> Optional[Dict]:
-    result = supabase.table("business_users").select("*").eq("business_id", business_id).eq("clerk_user_id", clerk_user_id).maybeSingle().execute()
+async def get_business_user(business_id: str, app_user_id: str) -> Optional[Dict]:
+    result = supabase.table("business_users").select("*").eq("business_id", business_id).eq("app_user_id", app_user_id).maybeSingle().execute()
     return result.data
 
 

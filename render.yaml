@@ -1,0 +1,68 @@
+# Render Blueprint — OpsMemory
+# Deploy with: render.com → New → Blueprint → connect GitHub repo
+
+databases:
+  - name: opsmemory-db
+    databaseName: opsmemory
+    user: opsmemory
+    plan: free
+
+services:
+  - type: web
+    name: opsmemory-backend
+    runtime: python
+    plan: free
+    buildCommand: cd opsmemory-backend && pip install -r requirements.txt
+    startCommand: cd opsmemory-backend && python scripts/migrate_all.py && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPSMEMORY_DB_HOST
+        fromDatabase:
+          name: opsmemory-db
+          property: host
+      - key: OPSMEMORY_DB_PORT
+        fromDatabase:
+          name: opsmemory-db
+          property: port
+      - key: OPSMEMORY_DB_NAME
+        fromDatabase:
+          name: opsmemory-db
+          property: database
+      - key: OPSMEMORY_DB_USER
+        fromDatabase:
+          name: opsmemory-db
+          property: user
+      - key: OPSMEMORY_DB_PASSWORD
+        fromDatabase:
+          name: opsmemory-db
+          property: password
+      - key: OPENROUTER_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_ENV
+        value: production
+      - key: BASE_URL
+        fromService:
+          type: web
+          name: opsmemory-backend
+          property: host
+
+  - type: web
+    name: opsmemory-frontend
+    runtime: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: SAMEORIGIN
+    routes:
+      - type: rewrite
+        source: /api/*
+        destination: https://opsmemory-backend.onrender.com/api/*
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://opsmemory-backend.onrender.com

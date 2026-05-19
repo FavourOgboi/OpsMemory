@@ -26,7 +26,7 @@ export function EventStream() {
   }, [fetchEvents]);
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface/60 backdrop-blur-sm">
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-surface/60 backdrop-blur-sm" data-tour="event-stream">
       <div className="flex items-center justify-between border-b border-border px-5 py-4">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">live · event · stream</div>

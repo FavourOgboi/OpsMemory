@@ -2,34 +2,34 @@
  * OpsMemory — Unified API Client
  *
  * Thin wrapper around fetch that:
- * - Reads VITE_API_BASE_URL (default http://localhost:8000)
- * - Attaches Authorization header with Clerk token (or dev-mode bypass)
+ * - Reads VITE_API_BASE_URL (default: same-origin proxy in dev, explicit URL in prod)
+ * - Attaches Authorization header with JWT token from local auth
  * - Handles 401/403 by redirecting to sign-in
  * - Standardizes error handling
  */
 
-import { createDevJwt } from "@/lib/dev-auth";
-
-/** Prefer same-origin proxy in dev; fall back to explicit host for remote access. */
+/** Prefer same-origin proxy in dev; fall back to explicit host for prod. */
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.DEV ? "" : "http://localhost:8000");
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  // Dev mode bypass: if Clerk is disabled, use a demo token from localStorage
-  let demoToken = localStorage.getItem("opsmemory-demo-token");
-  if (!demoToken && import.meta.env.DEV) {
-    demoToken = createDevJwt("ceo");
-    localStorage.setItem("opsmemory-demo-token", demoToken);
-    localStorage.setItem("opsmemory-demo-role", "ceo");
-  }
-  if (demoToken) return demoToken;
-  return null;
-}
 
-function setDemoToken(role: string) {
-  localStorage.setItem("opsmemory-demo-token", `demo-${role}`);
+  // 1. Real auth token (from local auth system)
+  const authToken = localStorage.getItem("opsmemory-token");
+  if (authToken) return authToken;
+
+  // 2. Demo mode token (for judges / team demo access)
+  const demoMode = localStorage.getItem("opsmemory-demo-mode") === "true";
+  if (demoMode) {
+    const demoToken = localStorage.getItem("opsmemory-demo-token");
+    if (demoToken) return demoToken;
+    // Generate a simple demo token
+    return "demo-ceo-token";
+  }
+
+  return null;
 }
 
 async function apiFetch(
@@ -48,10 +48,9 @@ async function apiFetch(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  // Dev mode role override header
-  if (import.meta.env.DEV) {
-    const demoRole = localStorage.getItem("opsmemory-demo-role") || "ceo";
-    headers["X-Demo-Role"] = demoRole;
+  // Demo mode header for backend to recognize
+  if (typeof window !== "undefined" && localStorage.getItem("opsmemory-demo-mode") === "true") {
+    headers["X-Demo-Role"] = "ceo";
   }
 
   const response = await fetch(url, {
@@ -60,11 +59,9 @@ async function apiFetch(
   });
 
   if (response.status === 401 || response.status === 403) {
-    if (import.meta.env.DEV && typeof window !== "undefined") {
-      const retryToken = createDevJwt("ceo");
-      localStorage.setItem("opsmemory-demo-token", retryToken);
-      localStorage.setItem("opsmemory-demo-role", "ceo");
-    } else if (typeof window !== "undefined") {
+    // Don't redirect in demo mode
+    const isDemoMode = typeof window !== "undefined" && localStorage.getItem("opsmemory-demo-mode") === "true";
+    if (!isDemoMode && typeof window !== "undefined") {
       window.location.href = "/sign-in";
     }
     throw new Error(`Authentication error: ${response.status}`);
@@ -98,4 +95,4 @@ export const api = {
   delete: (path: string) => apiFetch(path, { method: "DELETE" }),
 };
 
-export { API_BASE, setDemoToken };
+export { API_BASE };

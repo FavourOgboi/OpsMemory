@@ -59,6 +59,7 @@ opsmemory-backend/.env.local
 opsmemory-backend/venv/
 opsmemory-backend/.venv/
 opsmemory-backend/env/
+opsmemory-backend/data/
 *.egg-info/
 .pytest_cache/
 .coverage

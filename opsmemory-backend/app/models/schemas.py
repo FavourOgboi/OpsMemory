@@ -169,6 +169,23 @@ class RegisterBusinessRequest(BaseModel):
     owner_name: str
     ceo_phone: Optional[str] = None
     deal_approval_threshold: float = 100000
+    business_description: Optional[str] = None
+    website: Optional[str] = None
+
+
+class UpdateBusinessMemoryRequest(BaseModel):
+    """CEO can update business profile/memory at any time from Settings."""
+    name: Optional[str] = None
+    type: Optional[str] = None
+    business_description: Optional[str] = None
+    website: Optional[str] = None
+    instagram_url: Optional[str] = None
+    facebook_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    tiktok_url: Optional[str] = None
+    custom_links: Optional[List[Dict[str, Any]]] = None  # [{"label": "Catalogue", "url": "..."}]
+    deal_approval_threshold: Optional[float] = None
+    ceo_phone: Optional[str] = None
 
 
 class InviteTeamMemberRequest(BaseModel):

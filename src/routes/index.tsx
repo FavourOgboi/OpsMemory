@@ -24,11 +24,11 @@ function Landing() {
       <header className="fixed inset-x-0 top-0 z-50 border-b border-border/50 bg-background/60 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="relative h-7 w-7">
-              <div className="absolute inset-0 rounded-md bg-gradient-to-br from-primary to-violet shadow-glow" />
-              <div className="absolute inset-1 rounded-sm bg-background/80" />
-              <div className="absolute inset-2 rounded-[2px] bg-primary" />
-            </div>
+            <img src="/opsmem icon.png" alt="OpsMemory" className="h-8 w-8 rounded-lg" />
+
+
+
+
             <span className="font-display text-base font-semibold tracking-tight">OpsMemory</span>
           </Link>
           <nav className="hidden items-center gap-7 md:flex">

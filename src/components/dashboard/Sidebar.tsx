@@ -11,10 +11,12 @@ import {
   Menu,
   MessageCircle,
   Settings,
+  Sparkles,
+  Star,
   Users,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getAlertTarget } from '@/lib/mock-data';
 import { api } from '@/lib/api';
 import { useAgentStatus } from '@/store/useAgentStatus';
@@ -30,6 +32,8 @@ const NAV = [
   { to: '/dashboard/team', label: 'Team', icon: Users },
   { to: '/dashboard/chat', label: 'Intelligence', icon: MessageCircle },
   { to: '/dashboard/knowledge', label: 'Knowledge', icon: BookOpen },
+  { to: '/dashboard/review-intelligence', label: 'Review AI', icon: Star },
+  { to: '/dashboard/recommendations', label: 'Recommendations', icon: Sparkles },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -56,21 +60,39 @@ export function Sidebar() {
   const events = useEventStream((state) => state.events);
   const unresolved = events.filter((event) => !event.resolved);
 
+  // Triple-click logo for demo mode
+  const clickCountRef = useRef(0);
+  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+    if (clickCountRef.current >= 3) {
+      clickCountRef.current = 0;
+      const isDemoNow = localStorage.getItem('opsmemory-demo-mode') === 'true';
+      if (isDemoNow) {
+        localStorage.removeItem('opsmemory-demo-mode');
+        window.location.href = '/';
+      } else {
+        localStorage.setItem('opsmemory-demo-mode', 'true');
+        window.location.reload();
+      }
+      return;
+    }
+    clickTimerRef.current = setTimeout(() => { clickCountRef.current = 0; }, 600);
+  };
+
   const sidebarContent = (
     <>
-      <Link to="/" className="flex h-16 items-center gap-2.5 border-b border-border px-4">
-        <div className="relative h-8 w-8 shrink-0">
-          <div className="absolute inset-0 rounded-md bg-gradient-to-br from-primary to-cyan shadow-glow" />
-          <div className="absolute inset-1 rounded-sm bg-background/80" />
-          <div className="absolute inset-2 rounded-[2px] bg-primary" />
-        </div>
+      <div onClick={handleLogoClick} className="flex h-16 items-center gap-2.5 border-b border-border px-4 cursor-pointer">
+        <img src="/opsmem icon.png" alt="OpsMemory" className="h-8 w-8 shrink-0 rounded-lg" />
         {!collapsed && (
           <div className="min-w-0">
             <div className="truncate font-display text-sm font-semibold tracking-tight">OpsMemory</div>
             <div className="truncate font-mono text-[10px] uppercase tracking-widest text-muted-foreground">{businessName}</div>
           </div>
         )}
-      </Link>
+      </div>
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-3 py-4">
         <div className="space-y-1">
@@ -86,6 +108,7 @@ export function Sidebar() {
                 className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                   active ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
                 }`}
+              data-tour={item.to === '/dashboard/approvals' ? 'approvals-nav' : item.to === '/dashboard/knowledge' ? 'knowledge-nav' : undefined}
               >
                 {active && (
                   <motion.div
@@ -109,7 +132,7 @@ export function Sidebar() {
         {!collapsed && (
           <div className="mb-2 px-3 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Agent Status</div>
         )}
-        <div className="space-y-1">
+        <div className="space-y-1" data-tour="agent-status">
           {agents.map((agent) => (
             <div key={agent.name} className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs hover:bg-accent/40" title={agent.name}>
               <span className="relative flex h-2 w-2 shrink-0">

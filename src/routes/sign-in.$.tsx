@@ -1,14 +1,13 @@
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { Button } from '@/components/ui/button';
-import { installDevAuth } from '@/lib/dev-auth';
 import { useState } from 'react';
+import { useAuth } from '@/store/useAuth';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 export const Route = createFileRoute('/sign-in/$')({
   head: () => ({
     meta: [
       { title: 'Sign in | OpsMemory' },
-      { name: 'description', content: 'Sign in to the OpsMemory operational intelligence dashboard.' },
+      { name: 'description', content: 'Sign in to your OpsMemory dashboard.' },
     ],
   }),
   component: SignInPage,
@@ -16,89 +15,141 @@ export const Route = createFileRoute('/sign-in/$')({
 
 function SignInPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('emeka@global-supplies.com');
-  const [password, setPassword] = useState('demo');
+  const { login } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
 
-  const handleSignIn = () => {
-    installDevAuth('ceo');
-    localStorage.setItem('demoUser', JSON.stringify({
-      id: 'demo-user-1',
-      name: 'Emeka Okonkwo',
-      email: email,
-      business: {
-        name: 'Emeka Global Supplies',
-        type: 'Trading / Distribution',
-        location: 'Lagos, Nigeria',
-        phone: '+2348123456789',
-      },
-      isDemo: true,
-    }));
-    navigate({ to: '/dashboard' });
+  const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError('All fields are required');
+      return;
+    }
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || 'Invalid credentials');
+        return;
+      }
+      login(data.token, data.user, data.onboarding_completed || false);
+      navigate({ to: data.onboarding_completed ? '/dashboard' : '/onboarding' });
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 py-16">
-      <div className="absolute inset-0 bg-mesh opacity-70" />
-      <div className="absolute right-6 top-6 z-10">
-        <ThemeToggle />
+    <main className="relative flex min-h-screen bg-background">
+      {/* LEFT — Hero image */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        <img
+          src="/sign in.png"
+          alt="OpsMemory — AI-powered WhatsApp business agent"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 p-10">
+          <div className="flex items-center gap-2.5 mb-4">
+            <img src="/opsmem icon.png" alt="OpsMemory" className="h-8 w-8 rounded-lg" />
+            <span className="text-lg font-semibold text-white tracking-tight">OpsMemory</span>
+          </div>
+          <p className="text-sm text-white/70 max-w-sm leading-relaxed">
+            Your operational command centre.
+            Every WhatsApp message turns into business intelligence.
+          </p>
+        </div>
       </div>
 
-      <div className="relative z-10 grid w-full max-w-5xl gap-10 lg:grid-cols-[1fr_420px] lg:items-center">
-        <section>
-          <Link to="/" className="inline-flex items-center gap-2.5">
-            <div className="relative h-8 w-8">
-              <div className="absolute inset-0 rounded-md bg-gradient-to-br from-primary to-cyan shadow-glow" />
-              <div className="absolute inset-1 rounded-sm bg-background/80" />
-              <div className="absolute inset-2 rounded-[2px] bg-primary" />
-            </div>
-            <span className="font-display text-base font-semibold tracking-tight">OpsMemory</span>
+      {/* RIGHT — Sign in form */}
+      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:w-1/2">
+        <div className="w-full max-w-[400px]">
+          {/* Logo */}
+          <Link to="/" className="inline-flex items-center gap-2.5 mb-8"
+            onDoubleClick={() => {
+              localStorage.setItem('opsmemory-demo-mode', 'true');
+              window.location.href = '/dashboard';
+            }}
+          >
+            <img src="/opsmem icon.png" alt="OpsMemory" className="h-9 w-9 rounded-lg" />
+            <span className="text-lg font-semibold text-foreground tracking-tight">OpsMemory</span>
           </Link>
-          <div className="mt-10 font-mono text-xs uppercase tracking-[0.22em] text-primary">DEMO MODE</div>
-          <h1 className="mt-4 max-w-xl font-display text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-            Return to the live memory layer for your WhatsApp operations.
-          </h1>
-          <p className="mt-5 max-w-lg text-sm leading-relaxed text-muted-foreground">
-            Sign in to review agent decisions, customer dossiers, payments, and operational alerts for Emeka Global Supplies.
-          </p>
-        </section>
 
-        <section className="rounded-3xl border border-border bg-surface/70 p-6 shadow-elevated backdrop-blur">
-          <h2 className="font-display text-xl font-semibold">Sign in</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Demo account ready. Just click below.</p>
-          
-          <div className="mt-6 space-y-4">
-            <div>
-              <label className="text-xs font-medium">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
+          {/* Heading */}
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Welcome back</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">Sign in to your OpsMemory dashboard.</p>
+
+          {/* Form card */}
+          <div className="mt-8 rounded-2xl border border-border bg-surface/50 p-6 shadow-sm">
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@business.com"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder-muted-foreground transition-colors duration-150 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Password</label>
+                <div className="relative">
+                  <input
+                    type={showPwd ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Your password"
+                    className="w-full rounded-xl border border-border bg-background px-4 py-3 pr-10 text-sm text-foreground placeholder-muted-foreground transition-colors duration-150 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
+                  />
+                  <button type="button" onClick={() => setShowPwd(!showPwd)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
+                    {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={handleSignIn}
+                disabled={loading}
+                className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-md transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Signing in...</>
+                ) : (
+                  'Sign In'
+                )}
+              </button>
             </div>
-
-            <div>
-              <label className="text-xs font-medium">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-
-            <Button
-              onClick={handleSignIn}
-              className="mt-6 w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Enter Demo Dashboard
-            </Button>
-
-            <p className="text-center text-xs text-muted-foreground">
-              New user? <Link to="/sign-up" className="text-primary hover:underline">Create account</Link>
-            </p>
           </div>
-        </section>
+
+          {/* Footer link */}
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Don't have an account?{' '}
+            <Link to="/sign-up" className="font-medium text-primary hover:underline">
+              Create one
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );

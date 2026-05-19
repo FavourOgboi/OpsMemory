@@ -1,0 +1,250 @@
+# 🏆 OpsMemory — Hackathon Lock-In Guide
+### DSN × BCT LLM Agent Challenge | Deadline: May 24, 2026
+
+> **For the team:** This document explains everything we've built, what still needs to be done, and the exact steps to win.
+
+---
+
+## 🎯 What's the Hackathon About?
+
+Build **two AI agents** using real review datasets:
+
+| Task | What It Does | Our Implementation |
+|------|-------------|-------------------|
+| **Task A: User Modeling** | Given a user persona + item → generate a realistic review (text + star rating) | ✅ `ReviewIntelligence` page + API |
+| **Task B: Recommendation** | Given a user → give personalized recommendations via multi-turn conversation | ✅ `RecommendationEngine` chat + API |
+
+**Three deliverables required:**
+1. ✅ **Containerized web app** (our full-stack dashboard with Task A + B built in)
+2. ❌ **Solution Paper** (4-8 pages — NOT STARTED, this is 15-25% of score)
+3. ✅ **Code Repository** (clean GitHub repo with README)
+
+---
+
+## 📊 Current Score Estimate: 4/10 → Target: 8/10
+
+### What's done vs what's missing:
+
+```
+✅ DONE                           ❌ MISSING / NEEDS WORK
+─────────────────────────────     ──────────────────────────────
+✅ Full web UI (React + Vite)     ❌ Solution paper (0% done)
+✅ Task A review engine            ❌ Data not ingested into DB
+✅ Task B recommendation engine   ❌ No evaluation metrics yet
+✅ Cold-start handling             ❌ OpenRouter API key needed
+✅ Cross-domain detection          ❌ Docker not tested end-to-end
+✅ Nigerian Pidgin mode            ❌ Render deployment untested
+✅ Local auth (replaced Clerk)     ⚠️  Prompt tuning needed
+✅ PostgreSQL (replaced Supabase)  ⚠️  Cross-domain weak
+✅ 6-step onboarding flow
+✅ Dashboard + CRM + Analytics
+✅ Evaluation script (evaluate.py)
+✅ Dataset ingestion script
+✅ Migration script (50 tables)
+```
+
+---
+
+## 🔑 Scoring Rubric (What Judges Care About)
+
+### Task A Scoring:
+| Criteria | Weight | How We Score |
+|----------|--------|-------------|
+| Review Text Quality (ROUGE/BERTScore) | 30% | Need to run evaluate.py to get numbers |
+| Rating Accuracy (RMSE) | 20% | Need to run evaluate.py |
+| Behavioural Fidelity | 25% | Nigerian Pidgin + style matching ✅ |
+| **Solution Paper** | **15%** | **NOT WRITTEN — judges read this FIRST** |
+| Code Reproducibility | 10% | Clean repo + README ✅ |
+
+### Task B Scoring:
+| Criteria | Weight | How We Score |
+|----------|--------|-------------|
+| Ranking Quality (NDCG@10 / Hit Rate) | 30% | Need to run evaluate.py |
+| Cold-Start & Cross-Domain | 25% | Both implemented ✅ |
+| Contextual Relevance | 20% | Multi-turn chat ✅, Pidgin ✅ |
+| **Solution Paper** | **15%** | **NOT WRITTEN** |
+| Code Reproducibility | 10% | Clean repo + README ✅ |
+
+> ⚠️ **"The paper is what we read first"** — literal quote from the hackathon brief. This is THE most important thing to finish.
+
+---
+
+## 🛠️ Tech Stack (No Clerk, No Supabase)
+
+| What | Technology | Status |
+|------|-----------|--------|
+| Frontend | Vite + React 19 + TanStack Router | ✅ Running |
+| Backend | FastAPI + Uvicorn | ✅ Running |
+| Database | PostgreSQL 18 (local) | ✅ Connected |
+| LLM | OpenRouter (GPT-4o-mini) | ⚠️ Need API key |
+| Auth | Local (bcrypt + JWT) | ✅ Replaced Clerk |
+| Dataset | Yelp (5.3GB reviews) | ✅ Downloaded, ❌ Not ingested |
+
+---
+
+## 📱 How to Test
+
+### Start the app:
+```bash
+cd mission-control
+npm run dev
+# Frontend: http://localhost:8081
+# Backend:  http://localhost:8000
+```
+
+### Test Task A (Review Intelligence):
+```bash
+# No data needed — persona mode
+curl -X POST http://localhost:8000/reviews/simulate/persona \
+  -H "Content-Type: application/json" \
+  -d '{
+    "persona": {"avg_rating": 4.0, "tone": "positive"},
+    "item_name": "Mama Put Restaurant",
+    "item_category": "Nigerian Restaurant",
+    "nigerian_context": true
+  }'
+```
+
+### Test Task B (Recommendations):
+```bash
+curl -X POST http://localhost:8000/recommend/start \
+  -H "Content-Type: application/json" \
+  -d '{"message": "I want spicy food", "source": "yelp"}'
+```
+
+### Demo Mode (for judges):
+- **Double-click** the OpsMemory logo on sign-in → instant dashboard
+- **Triple-click** the sidebar logo → toggle demo data
+
+---
+
+## 🔴 5-DAY ACTION PLAN
+
+### Day 1 (May 19) — DATA PIPELINE
+- [ ] Get OpenRouter API key: https://openrouter.ai/keys
+- [ ] Add key to `.env`: `OPENROUTER_API_KEY=sk-or-...`
+- [ ] Run: `python scripts/ingest_datasets.py`
+- [ ] Verify: `psql -U postgres opsmemory -c "SELECT COUNT(*) FROM external_users;"`
+- [ ] Test Task A via curl (profile mode — needs real data)
+- [ ] Test Task B via curl (should show real candidates)
+
+### Day 2 (May 20) — EVALUATION & TUNING
+- [ ] Install: `pip install rouge-score`
+- [ ] Run: `python scripts/evaluate.py --task all --samples 15`
+- [ ] Record ROUGE-L, RMSE, Hit Rate numbers
+- [ ] Tune prompts if scores are low
+- [ ] Run evaluation again → compare
+- [ ] Repeat 3-5 times
+
+### Day 3 (May 21) — SOLUTION PAPER 📝
+> **THE MOST IMPORTANT DAY**
+
+Paper outline (4-8 pages):
+1. Abstract
+2. System Architecture (include the diagram from README)
+3. Task A: User Modeling approach + results (ROUGE, RMSE)
+4. Task B: Recommendation approach + results (Hit Rate)
+5. Nigerian Contextualization
+6. Ablation Studies (with/without past reviews, with/without Pidgin)
+7. Limitations & Future Work
+
+### Day 4 (May 22) — CONTAINERIZATION & DEPLOY
+- [ ] Test: `docker compose up`
+- [ ] Deploy backend to Render
+- [ ] Deploy frontend to Render
+- [ ] Test all API endpoints on production URL
+- [ ] Verify judges can reproduce
+
+### Day 5 (May 23-24) — POLISH & SUBMIT
+- [ ] Final code cleanup
+- [ ] Record 2-min demo video
+- [ ] Final paper proofread
+- [ ] Submit via the form before midnight May 24
+
+---
+
+## 🗂️ Key Files to Know
+
+```
+mission-control/
+├── src/                              # Frontend (React)
+│   ├── routes/
+│   │   ├── sign-up.$.tsx             # Sign up (local auth)
+│   │   ├── sign-in.$.tsx             # Sign in (local auth)
+│   │   ├── onboarding.tsx            # 6-step setup
+│   │   └── dashboard.tsx             # Main layout
+│   ├── components/
+│   │   ├── review/ReviewIntelligence.tsx   # Task A UI
+│   │   ├── recommendations/RecommendationEngine.tsx  # Task B UI
+│   │   └── onboarding/              # Steps 1-6
+│   └── store/
+│       ├── useAuth.ts                # Auth state (JWT)
+│       ├── useOnboarding.ts          # Onboarding state
+│       └── useTour.ts                # Tour state
+│
+├── opsmemory-backend/                # Backend (FastAPI)
+│   ├── app/
+│   │   ├── routers/
+│   │   │   ├── reviews.py            # Task A endpoints
+│   │   │   ├── recommendations.py    # Task B endpoints
+│   │   │   └── local_auth.py         # Auth (bcrypt + JWT)
+│   │   ├── services/
+│   │   │   ├── review_engine.py      # Task A core logic
+│   │   │   └── recommendation_engine.py  # Task B core logic
+│   │   └── database.py              # PostgreSQL client
+│   ├── scripts/
+│   │   ├── migrate_all.py            # Create all tables
+│   │   ├── ingest_datasets.py        # Load Yelp data
+│   │   └── evaluate.py              # Compute metrics
+│   └── data/                         # Yelp JSON files go here
+│       ├── yelp_academic_dataset_business.json (118MB)
+│       ├── yelp_academic_dataset_review.json (5.3GB)
+│       └── yelp_academic_dataset_user.json (3.3GB)
+│
+├── docker-compose.yml                # PostgreSQL + backend + frontend
+├── Dockerfile                        # Container build
+└── README.md                         # Main README
+```
+
+---
+
+## 🤫 Secret Demo Access
+
+Only we know about these:
+- **Sign-in/Sign-up page:** Double-click the OpsMemory logo → goes straight to dashboard
+- **Dashboard sidebar:** Triple-click the OpsMemory logo → toggles demo mode
+
+---
+
+## 💡 Competitive Advantages
+
+1. **Full web app** — most teams will submit bare API endpoints
+2. **Nigerian Pidgin** — bonus marks for cultural contextualization
+3. **Multi-turn sessions** — not just single-shot recommendations
+4. **Cold-start protocol** — agent asks questions first for unknown users
+5. **Beautiful UI** — judges will be impressed by the production quality
+6. **Session persistence** — recommendations stored in PostgreSQL
+7. **Evaluation built-in** — we compute our own ROUGE/RMSE/Hit Rate
+
+---
+
+## ⚡ Bonus Nigerian Mark
+
+The hackathon brief says: *"Additional marks if contextualized to behave and sound like Nigerians"*
+
+Our implementation:
+- ✅ Nigerian Pidgin review generation (oga, abeg, na wa o, e good sha)
+- ✅ Nigerian business context (Bola Agro catalog — Lagos-based)
+- ✅ Naira (₦) pricing
+- ✅ Lagos delivery zones
+- ✅ Nigerian writing style patterns
+
+---
+
+## Questions? Concerns?
+
+If anything breaks:
+1. Check PostgreSQL is running: `Get-Service -Name "postgresql*"`
+2. Check backend: `http://localhost:8000/health`
+3. Check frontend: `http://localhost:8081`
+4. Check .env has `OPENROUTER_API_KEY` set

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
@@ -16,6 +17,8 @@ import { Route as SignUpSplatRouteImport } from './routes/sign-up.$'
 import { Route as SignInSplatRouteImport } from './routes/sign-in.$'
 import { Route as DashboardTeamRouteImport } from './routes/dashboard/team'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard/settings'
+import { Route as DashboardReviewIntelligenceRouteImport } from './routes/dashboard/review-intelligence'
+import { Route as DashboardRecommendationsRouteImport } from './routes/dashboard/recommendations'
 import { Route as DashboardKnowledgeRouteImport } from './routes/dashboard/knowledge'
 import { Route as DashboardFinanceRouteImport } from './routes/dashboard/finance'
 import { Route as DashboardChatRouteImport } from './routes/dashboard/chat'
@@ -24,6 +27,11 @@ import { Route as DashboardAgentsRouteImport } from './routes/dashboard/agents'
 import { Route as DashboardCustomersIndexRouteImport } from './routes/dashboard/customers.index'
 import { Route as DashboardCustomersIdRouteImport } from './routes/dashboard/customers.$id'
 
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -59,6 +67,18 @@ const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardReviewIntelligenceRoute =
+  DashboardReviewIntelligenceRouteImport.update({
+    id: '/review-intelligence',
+    path: '/review-intelligence',
+    getParentRoute: () => DashboardRoute,
+  } as any)
+const DashboardRecommendationsRoute =
+  DashboardRecommendationsRouteImport.update({
+    id: '/recommendations',
+    path: '/recommendations',
+    getParentRoute: () => DashboardRoute,
+  } as any)
 const DashboardKnowledgeRoute = DashboardKnowledgeRouteImport.update({
   id: '/knowledge',
   path: '/knowledge',
@@ -98,11 +118,14 @@ const DashboardCustomersIdRoute = DashboardCustomersIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/onboarding': typeof OnboardingRoute
   '/dashboard/agents': typeof DashboardAgentsRoute
   '/dashboard/approvals': typeof DashboardApprovalsRoute
   '/dashboard/chat': typeof DashboardChatRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/knowledge': typeof DashboardKnowledgeRoute
+  '/dashboard/recommendations': typeof DashboardRecommendationsRoute
+  '/dashboard/review-intelligence': typeof DashboardReviewIntelligenceRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/team': typeof DashboardTeamRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -113,11 +136,14 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/onboarding': typeof OnboardingRoute
   '/dashboard/agents': typeof DashboardAgentsRoute
   '/dashboard/approvals': typeof DashboardApprovalsRoute
   '/dashboard/chat': typeof DashboardChatRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/knowledge': typeof DashboardKnowledgeRoute
+  '/dashboard/recommendations': typeof DashboardRecommendationsRoute
+  '/dashboard/review-intelligence': typeof DashboardReviewIntelligenceRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/team': typeof DashboardTeamRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -130,11 +156,14 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/onboarding': typeof OnboardingRoute
   '/dashboard/agents': typeof DashboardAgentsRoute
   '/dashboard/approvals': typeof DashboardApprovalsRoute
   '/dashboard/chat': typeof DashboardChatRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/knowledge': typeof DashboardKnowledgeRoute
+  '/dashboard/recommendations': typeof DashboardRecommendationsRoute
+  '/dashboard/review-intelligence': typeof DashboardReviewIntelligenceRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/team': typeof DashboardTeamRoute
   '/sign-in/$': typeof SignInSplatRoute
@@ -148,11 +177,14 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/onboarding'
     | '/dashboard/agents'
     | '/dashboard/approvals'
     | '/dashboard/chat'
     | '/dashboard/finance'
     | '/dashboard/knowledge'
+    | '/dashboard/recommendations'
+    | '/dashboard/review-intelligence'
     | '/dashboard/settings'
     | '/dashboard/team'
     | '/sign-in/$'
@@ -163,11 +195,14 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/onboarding'
     | '/dashboard/agents'
     | '/dashboard/approvals'
     | '/dashboard/chat'
     | '/dashboard/finance'
     | '/dashboard/knowledge'
+    | '/dashboard/recommendations'
+    | '/dashboard/review-intelligence'
     | '/dashboard/settings'
     | '/dashboard/team'
     | '/sign-in/$'
@@ -179,11 +214,14 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/onboarding'
     | '/dashboard/agents'
     | '/dashboard/approvals'
     | '/dashboard/chat'
     | '/dashboard/finance'
     | '/dashboard/knowledge'
+    | '/dashboard/recommendations'
+    | '/dashboard/review-intelligence'
     | '/dashboard/settings'
     | '/dashboard/team'
     | '/sign-in/$'
@@ -196,12 +234,20 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRouteWithChildren
+  OnboardingRoute: typeof OnboardingRoute
   SignInSplatRoute: typeof SignInSplatRoute
   SignUpSplatRoute: typeof SignUpSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -249,6 +295,20 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/dashboard/settings'
       preLoaderRoute: typeof DashboardSettingsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/review-intelligence': {
+      id: '/dashboard/review-intelligence'
+      path: '/review-intelligence'
+      fullPath: '/dashboard/review-intelligence'
+      preLoaderRoute: typeof DashboardReviewIntelligenceRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/recommendations': {
+      id: '/dashboard/recommendations'
+      path: '/recommendations'
+      fullPath: '/dashboard/recommendations'
+      preLoaderRoute: typeof DashboardRecommendationsRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/knowledge': {
@@ -309,6 +369,8 @@ interface DashboardRouteChildren {
   DashboardChatRoute: typeof DashboardChatRoute
   DashboardFinanceRoute: typeof DashboardFinanceRoute
   DashboardKnowledgeRoute: typeof DashboardKnowledgeRoute
+  DashboardRecommendationsRoute: typeof DashboardRecommendationsRoute
+  DashboardReviewIntelligenceRoute: typeof DashboardReviewIntelligenceRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardTeamRoute: typeof DashboardTeamRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -322,6 +384,8 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardChatRoute: DashboardChatRoute,
   DashboardFinanceRoute: DashboardFinanceRoute,
   DashboardKnowledgeRoute: DashboardKnowledgeRoute,
+  DashboardRecommendationsRoute: DashboardRecommendationsRoute,
+  DashboardReviewIntelligenceRoute: DashboardReviewIntelligenceRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardTeamRoute: DashboardTeamRoute,
   DashboardIndexRoute: DashboardIndexRoute,
@@ -336,6 +400,7 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRouteWithChildren,
+  OnboardingRoute: OnboardingRoute,
   SignInSplatRoute: SignInSplatRoute,
   SignUpSplatRoute: SignUpSplatRoute,
 }

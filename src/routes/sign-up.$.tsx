@@ -1,13 +1,13 @@
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router';
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { Button } from '@/components/ui/button';
 import { useState } from 'react';
+import { useAuth } from '@/store/useAuth';
+import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 export const Route = createFileRoute('/sign-up/$')({
   head: () => ({
     meta: [
       { title: 'Get early access | OpsMemory' },
-      { name: 'description', content: 'Create your OpsMemory account and connect a business workspace.' },
+      { name: 'description', content: 'Create your OpsMemory account and set up your business agent.' },
     ],
   }),
   component: SignUpPage,
@@ -15,152 +15,159 @@ export const Route = createFileRoute('/sign-up/$')({
 
 function SignUpPage() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({
-    ownerName: 'Emeka Okonkwo',
-    businessName: 'Emeka Global Supplies',
-    email: 'emeka@global-supplies.com',
-    phone: '+2348123456789',
-    businessType: 'Trading / Distribution',
-    location: 'Lagos, Nigeria',
-  });
+  const { login } = useAuth();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  const handleSignUp = async () => {
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setError('All fields are required');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    setLoading(true);
+    setError('');
 
-  const handleSignUp = () => {
-    // Demo: Save to localStorage and redirect to dashboard
-    localStorage.setItem('demoUser', JSON.stringify({
-      id: 'demo-user-1',
-      name: formData.ownerName,
-      email: formData.email,
-      business: {
-        name: formData.businessName,
-        type: formData.businessType,
-        location: formData.location,
-        phone: formData.phone,
-      },
-      isDemo: true,
-    }));
-    navigate({ to: '/dashboard' });
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: email.trim().toLowerCase(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || 'Registration failed');
+        return;
+      }
+      login(data.token, data.user, false);
+      navigate({ to: '/onboarding' });
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 py-16">
-      <div className="absolute inset-0 bg-mesh opacity-70" />
-      <div className="absolute right-6 top-6 z-10">
-        <ThemeToggle />
+    <main className="relative flex min-h-screen bg-background">
+      {/* LEFT — Hero image */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
+        <img
+          src="/sign in.png"
+          alt="OpsMemory — AI-powered WhatsApp business agent"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        {/* Gradient overlay for readability */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+        {/* Bottom text overlay */}
+        <div className="absolute bottom-0 left-0 right-0 p-10">
+          <div className="flex items-center gap-2.5 mb-4">
+            <img src="/opsmem icon.png" alt="OpsMemory" className="h-8 w-8 rounded-lg" />
+            <span className="text-lg font-semibold text-white tracking-tight">OpsMemory</span>
+          </div>
+          <p className="text-sm text-white/70 max-w-sm leading-relaxed">
+            Your WhatsApp messages become business intelligence.
+            Six AI agents watch your operations 24/7.
+          </p>
+        </div>
       </div>
 
-      <div className="relative z-10 grid w-full max-w-5xl gap-10 lg:grid-cols-[1fr_450px] lg:items-center">
-        <section>
-          <Link to="/" className="inline-flex items-center gap-2.5">
-            <div className="relative h-8 w-8">
-              <div className="absolute inset-0 rounded-md bg-gradient-to-br from-primary to-cyan shadow-glow" />
-              <div className="absolute inset-1 rounded-sm bg-background/80" />
-              <div className="absolute inset-2 rounded-[2px] bg-primary" />
-            </div>
-            <span className="font-display text-base font-semibold tracking-tight">OpsMemory</span>
+      {/* RIGHT — Sign up form */}
+      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:w-1/2">
+        <div className="w-full max-w-[400px]">
+          {/* Logo */}
+          <Link to="/" className="inline-flex items-center gap-2.5 mb-8"
+            onDoubleClick={() => {
+              localStorage.setItem('opsmemory-demo-mode', 'true');
+              window.location.href = '/dashboard';
+            }}
+          >
+            <img src="/opsmem icon.png" alt="OpsMemory" className="h-9 w-9 rounded-lg" />
+            <span className="text-lg font-semibold text-foreground tracking-tight">OpsMemory</span>
           </Link>
-          <div className="mt-10 font-mono text-xs uppercase tracking-[0.22em] text-primary">DEMO MODE</div>
-          <h1 className="mt-4 max-w-xl font-display text-4xl font-semibold leading-tight tracking-tight md:text-5xl">
-            Create the workspace before the business memory starts flowing.
-          </h1>
-          <p className="mt-5 max-w-lg text-sm leading-relaxed text-muted-foreground">
-            This account becomes the owner identity for the demo workspace. All details are pre-filled with example data from <strong>Emeka Global Supplies</strong>, a Lagos trading company. Customize any field and proceed to see the full OpsMemory dashboard in action.
-          </p>
-        </section>
 
-        <section className="rounded-3xl border border-border bg-surface/70 p-6 shadow-elevated backdrop-blur">
-          <h2 className="font-display text-xl font-semibold">Create your account</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Demo data is pre-filled. Edit as needed.</p>
-          
-          <div className="mt-6 space-y-4">
-            <div>
-              <label className="text-xs font-medium">Owner Name</label>
-              <input
-                type="text"
-                name="ownerName"
-                value={formData.ownerName}
-                onChange={handleInputChange}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
+          {/* Heading */}
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Create your account</h1>
+          <p className="mt-1.5 text-sm text-muted-foreground">Your business agent is ready in 5 minutes.</p>
 
-            <div>
-              <label className="text-xs font-medium">Business Name</label>
-              <input
-                type="text"
-                name="businessName"
-                value={formData.businessName}
-                onChange={handleInputChange}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
+          {/* Form card */}
+          <div className="mt-8 rounded-2xl border border-border bg-surface/50 p-6 shadow-sm">
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Full Name</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your name"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder-muted-foreground transition-colors duration-150 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                />
+              </div>
 
-            <div>
-              <label className="text-xs font-medium">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@business.com"
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder-muted-foreground transition-colors duration-150 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                />
+              </div>
 
-            <div>
-              <label className="text-xs font-medium">Phone</label>
-              <input
-                type="tel"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">Password</label>
+                <div className="relative">
+                  <input
+                    type={showPwd ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    className="w-full rounded-xl border border-border bg-background px-4 py-3 pr-10 text-sm text-foreground placeholder-muted-foreground transition-colors duration-150 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSignUp()}
+                  />
+                  <button type="button" onClick={() => setShowPwd(!showPwd)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
+                    {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
 
-            <div>
-              <label className="text-xs font-medium">Business Type</label>
-              <select
-                name="businessType"
-                value={formData.businessType}
-                onChange={handleInputChange}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+              {error && (
+                <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-500">
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={handleSignUp}
+                disabled={loading}
+                className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-md transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                <option>Trading / Distribution</option>
-                <option>Logistics</option>
-                <option>Healthcare</option>
-                <option>Services</option>
-                <option>Manufacturing</option>
-                <option>Food and Beverage</option>
-              </select>
+                {loading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Creating account...</>
+                ) : (
+                  'Create Account'
+                )}
+              </button>
             </div>
-
-            <div>
-              <label className="text-xs font-medium">Location</label>
-              <input
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleInputChange}
-                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-              />
-            </div>
-
-            <Button
-              onClick={handleSignUp}
-              className="mt-6 w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              Enter Demo Dashboard
-            </Button>
-
-            <p className="text-center text-xs text-muted-foreground">
-              Already have an account? <Link to="/sign-in" className="text-primary hover:underline">Sign in</Link>
-            </p>
           </div>
-        </section>
+
+          {/* Footer link */}
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <Link to="/sign-in" className="font-medium text-primary hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   );

@@ -20,6 +20,9 @@ from app.routers import (
     onboarding,
     knowledge,
     finance,
+    reviews,
+    recommendations,
+    local_auth,
 )
 from app.jobs.scheduler import start_scheduler
 from app.config import settings
@@ -75,6 +78,13 @@ app.include_router(passport.router, prefix="/api")
 app.include_router(onboarding.router, prefix="/api")
 app.include_router(knowledge.router, prefix="/api")
 app.include_router(finance.router, prefix="/api")
+
+# ── Auth (local — replaces Clerk) ──────────────────────────────────────────────
+app.include_router(local_auth.router, prefix="/api")
+
+# ── Hackathon: Task A + Task B (public — no auth) ─────────────────────────────
+app.include_router(reviews.router, prefix="/api")
+app.include_router(recommendations.router, prefix="/api")
 
 
 # ── Health check ──────────────────────────────────────────────────────────────

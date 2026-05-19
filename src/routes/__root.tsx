@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-// import { ClerkProvider } from "@clerk/tanstack-react-start"; // DEMO MODE: Disabled
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -10,6 +9,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useTheme } from "@/store/useTheme";
+import { useAuth } from "@/store/useAuth";
 
 import appCss from "../styles.css?url";
 
@@ -88,6 +88,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
+      {
+        rel: "icon",
+        type: "image/png",
+        href: "/opsmem icon.png",
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -125,8 +130,12 @@ function ThemeSync() {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const checkAuth = useAuth((s) => s.checkAuth);
 
-  // DEMO MODE: Removed ClerkProvider
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeSync />
