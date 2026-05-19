@@ -348,3 +348,22 @@ To ensure we hit our 3-day deadline, responsibilities are split as follows:
   - Lock in the multi-tenant architecture to ensure 100% data isolation between businesses.
   - Finalize the Team Invite logic (when a CEO clicks "Invite", an email is sent, and the invited user is authenticated directly into that specific company's database).
   - Build out the interfaces and role-based access so invited staff only see what they are supposed to see.
+  - **Live WhatsApp Testing:** Connect a real, active WhatsApp number (via Twilio sandbox or Meta API) and conduct a live end-to-end test to ensure messages perfectly sync with the dashboard in real-time.
+
+---
+
+## 🏆 Extra Hackathon Winning Strategies (To Impress the Judges)
+If we want to secure the #1 spot, we need to show the judges that this isn't just a basic MVP, but a production-ready enterprise tool. Include these points in the paper and the demo:
+
+### 1. The 2-Minute Demo Video Strategy
+If we submit a video, it should follow this exact script:
+- **0:00 - 0:30:** Show the problem (business owners overwhelmed by WhatsApp messages).
+- **0:30 - 1:00:** Show a split screen: WhatsApp on the left, our Dashboard on the right. Send a message in Nigerian Pidgin on WhatsApp, and show the dashboard updating *instantly* in real-time.
+- **1:00 - 1:30:** Show the AI perfectly handling a complex recommendation or cold-start problem (e.g., "I need a gift for my wife but I don't know what she likes").
+- **1:30 - 2:00:** Show the multi-tenant architecture (Logging in as a different business and seeing completely isolated data).
+
+### 2. Edge-Case & Error Handling (Resilience)
+Judges love apps that don't crash. We should highlight that if the LLM API times out or fails, our agent gracefully degrades by sending a localized fallback message (e.g., *"Abeg, network dey delay small. Give me one minute make I check am for you."*) instead of crashing the server.
+
+### 3. Highlighting Enterprise Scalability (pgvector)
+Make sure the Solution Paper emphasizes our use of **PostgreSQL + pgvector**. Explain that we aren't just doing simple keyword searches; we are using advanced vector embeddings to instantly perform semantic similarity searches across the massive 5.3GB Yelp dataset. This proves to the judges that the system is highly scalable and built for massive, real-world data loads.
