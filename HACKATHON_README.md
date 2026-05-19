@@ -248,3 +248,55 @@ If anything breaks:
 2. Check backend: `http://localhost:8000/health`
 3. Check frontend: `http://localhost:8081`
 4. Check .env has `OPENROUTER_API_KEY` set
+
+---
+
+## 🔴 Critical 3-Day Lock-In Plan
+
+### Day 1: Data Pipeline & Evaluation
+**Goal:** Get real data flowing and get numbers for the paper
+- Get an OpenRouter API key (https://openrouter.ai/keys) — even $5 credit is enough
+- Run `python scripts/ingest_datasets.py` — this takes 1-3 hours for 5.3GB of reviews
+- Verify data: `psql -U postgres opsmemory -c "SELECT COUNT(*) FROM external_users;"`
+- Run `python scripts/evaluate.py --task all --samples 15`
+- Record ROUGE-L, RMSE, Hit Rate numbers
+- Tune prompts based on results (adjust temperature, add few-shot examples)
+
+### Day 2: Solution Paper & Containerization
+**Goal:** Write the paper (judges read this FIRST) and test deployment
+- Write the 4-8 page paper covering: Abstract, Approach, Task A & B results, Nigerian Contextualization, and Ablation Studies.
+- Test `docker compose up` end-to-end
+- Deploy to Render — verify all endpoints work
+- Test containerized version matches local results
+
+### Day 3: Polish & Submit
+**Goal:** Clean submission
+- Final code cleanup, comments, docstrings
+- Record a 2-min demo video (optional but powerful)
+- Final paper review
+- Submit all three deliverables via the form
+
+### What Would Win This Hackathon
+Based on the rubric, here's what separates winners from everyone else:
+
+**Winners will have:**
+- Strong paper (judges read this first) — clear reasoning, not just "we used GPT"
+- Real numbers — ROUGE > 0.3, RMSE < 1.0, Hit Rate > 0.4
+- Ablation studies — "removing past reviews dropped ROUGE by 15%"
+- One-command setup — `docker compose up` and it works
+- Nigerian bonus — authentic Pidgin, not caricature
+
+**Our advantages:**
+- 🟢 Beautiful web UI (most teams will submit bare API endpoints)
+- 🟢 Full-stack production app (impressive for hackathon)
+- 🟢 Nigerian Pidgin is well-engineered
+- 🟢 Multi-turn recommendation with session persistence
+- 🟢 Cold-start + cross-domain are both implemented
+- 🟢 Clean, modular codebase
+
+**Our risks:**
+- 🔴 Paper not started — this is 15-25% of total score
+- 🔴 No evaluation numbers yet — can't prove anything works
+- 🔴 Yelp data = American users — Nigerian contextualization is prompt-level only
+- 🔴 Cross-domain is keyword-based, not semantic
+- 🟡 NDCG@10 not implemented (only Hit Rate)
