@@ -1,381 +1,633 @@
-# OpsMemory — DSN x BCT LLM Agent Challenge
+# OpsMemory
 
-> **AI agents that understand how people behave, what they want, and what they'll choose next.**
+**Mission Control for WhatsApp-first businesses**
 
-Built for the [DSN × BCT LLM Agent Challenge](https://dsnxbct.com) — a hackathon tasking teams with building LLM-powered user modeling (Task A) and recommendation engines (Task B) using real-world review datasets.
+OpsMemory ingests customer conversations from a dedicated WhatsApp Business number, extracts structured operational signals, stores durable tenant memory, runs specialized AI agents, and surfaces decisions on a live dashboard. Business owners configure products, policies, and contact details through an onboarding flow; that data is indexed immediately so WhatsApp replies draw from the same knowledge base.
 
----
+Built for operational SMEs (distribution, logistics, food, services) and extended with hackathon capabilities (review simulation and conversational recommendations over large review datasets).
 
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [Task A: Review Intelligence (User Modeling)](#task-a-review-intelligence)
-- [Task B: Recommendation Engine](#task-b-recommendation-engine)
-- [Nigerian Context](#nigerian-context)
-- [Demo Mode](#demo-mode)
-- [Deployment (Render)](#deployment-render)
-- [Evaluation](#evaluation)
-- [Implementation Status](#implementation-status)
-- [Testing Guide](#testing-guide)
-- [Future Improvements](#future-improvements)
+Repository: [github.com/FavourOgboi/OpsMemory](https://github.com/FavourOgboi/OpsMemory)
 
 ---
 
-## Quick Start
+## Table of contents
 
-### Prerequisites
-- **Python 3.11+** with pip
-- **Node.js 18+** with npm
-- **PostgreSQL 15+** (local install or Docker)
+1. [System overview](#1-system-overview)
+2. [Architecture](#2-architecture)
+3. [Prerequisites](#3-prerequisites)
+4. [Quick start (one command)](#4-quick-start-one-command)
+5. [Full setup from a fresh clone](#5-full-setup-from-a-fresh-clone)
+6. [Configuration reference](#6-configuration-reference)
+7. [Using the application](#7-using-the-application)
+8. [WhatsApp webhooks (optional)](#8-whatsapp-webhooks-optional)
+9. [Development commands](#9-development-commands)
+10. [Database and migrations](#10-database-and-migrations)
+11. [Deployment](#11-deployment)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Repository layout](#13-repository-layout)
+14. [Security](#14-security)
 
-### 1. Clone & Install
+---
+
+## 1. System overview
+
+OpsMemory is organized in five layers:
+
+| Layer | Responsibility |
+|-------|----------------|
+| Input | WhatsApp (Meta Cloud API or Twilio sandbox), optional voice |
+| Extraction | Intent, amounts, language, payment cues, product mentions |
+| Memory | PostgreSQL: customers, messages, orders, knowledge base, agent actions |
+| Agents | Collections, Churn, Deal, Fulfillment, Revenue Pulse, Relationship Health |
+| Output | WhatsApp replies, dashboard alerts, approvals, CEO email digests |
+
+**Multi-tenancy:** Every record is scoped by `business_id`. One pairing code maps to one workspace.
+
+**Onboarding to WhatsApp answers:** The six-step setup form persists business profile and catalog text into PostgreSQL and embeds them in `knowledge_base`. Incoming WhatsApp messages trigger retrieval-augmented generation before a reply is sent.
+
+---
+
+## 2. Architecture
+
+### 2.1 Runtime diagram (local development)
+
+```mermaid
+flowchart TB
+  subgraph clients [Clients]
+    Browser[Browser :5173]
+    WA[WhatsApp Meta / Twilio]
+  end
+
+  subgraph host [Your machine npm start]
+    Vite[Vite + TanStack Start]
+    API[FastAPI :8000]
+    Sched[APScheduler]
+  end
+
+  subgraph data [Data]
+    PG[(PostgreSQL :5433)]
+    OR[OpenRouter API]
+  end
+
+  subgraph optional [Optional]
+    CF[cloudflared tunnel]
+  end
+
+  Browser -->|/api /webhook proxy| Vite
+  Vite --> API
+  WA -->|HTTPS webhook| CF
+  CF --> API
+  WA -->|local tunnel| API
+  API --> PG
+  API --> OR
+  Sched --> API
+  Sched --> PG
+```
+
+### 2.2 Request path (WhatsApp message to reply)
+
+```mermaid
+sequenceDiagram
+  participant C as Customer
+  participant W as WhatsApp provider
+  participant H as webhook.py
+  participant E as extraction.py
+  participant R as rag.py
+  participant O as agent_orchestrator.py
+  participant D as PostgreSQL
+
+  C->>W: Message
+  W->>H: POST /webhook/...
+  H->>E: extract_from_text
+  H->>D: resolve customer, store message
+  H->>O: orchestrate_reply
+  O->>R: retrieve_relevant_knowledge
+  R->>D: knowledge_base vectors
+  O->>E: generate_customer_response
+  E->>OR: LLM + knowledge context
+  O->>W: send_whatsapp_message
+```
+
+### 2.3 Technology stack
+
+| Component | Technology |
+|-----------|------------|
+| Frontend | React 19, TanStack Router/Start, Zustand, Tailwind CSS v4, Vite 7 |
+| Backend | FastAPI, Uvicorn, APScheduler (timezone Africa/Lagos) |
+| Database | PostgreSQL 15+ with pgvector image (optional extension) |
+| LLM / embeddings | OpenRouter (GPT-4o-mini class models, text-embedding-3-small) |
+| Auth | Local accounts: bcrypt + JWT (`app_users`, no Clerk required for dev) |
+| Packaging | Docker Compose for Postgres only; app runs on host for hot reload |
+
+---
+
+## 3. Prerequisites
+
+Install the following before cloning:
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| Git | any recent | Clone the repository |
+| Node.js | 20 or newer | Frontend and `npm start` orchestration |
+| npm | 10 or newer | Installed with Node |
+| Python | 3.10 or newer (3.11 recommended) | Backend API |
+| Docker | 24 or newer (recommended) | PostgreSQL without a local server install |
+| OpenRouter account | n/a | API key for LLM and embeddings ([openrouter.ai/keys](https://openrouter.ai/keys)) |
+
+Optional:
+
+| Tool | Purpose |
+|------|---------|
+| cloudflared | Public HTTPS URL for WhatsApp webhooks on a laptop or VM |
+| psql | Manual SQL if you prefer CLI migrations |
+
+**Hardware:** 4 GB RAM minimum for Docker Postgres plus dev servers; 8 GB recommended if ingesting large Yelp JSON files.
+
+---
+
+## 4. Quick start (one command)
+
+After prerequisites are installed:
 
 ```bash
 git clone https://github.com/FavourOgboi/OpsMemory.git
-cd mission-control
-
-# Frontend
-npm install
-
-# Backend
-cd opsmemory-backend
-python -m venv venv
-.\venv\Scripts\activate   # Windows
-pip install -r requirements.txt
+cd OpsMemory
+npm run setup
 ```
 
-### 2. Database Setup
+Edit `opsmemory-backend/.env` and set:
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-your-key-here
+```
+
+Start everything:
 
 ```bash
-# Create the database
-createdb -U postgres opsmemory
+npm start
+```
 
-# Run all migrations (tables, indexes, extensions)
+This single command:
+
+1. Starts PostgreSQL in Docker on port **5433** (unless you pass `--no-docker`)
+2. Runs database migrations
+3. Starts the FastAPI backend on **http://localhost:8000**
+4. Starts the Vite frontend on **http://localhost:5173**
+
+Open **http://localhost:5173/sign-up**, create an account, complete onboarding (business name, catalog lines, policies), then use the dashboard.
+
+**With WhatsApp webhooks** (requires `cloudflared` installed):
+
+```bash
+npm run dev:tunnel
+```
+
+The tunnel prints a public URL; configure it in Meta or Twilio as described in [Section 8](#8-whatsapp-webhooks-optional).
+
+---
+
+## 5. Full setup from a fresh clone
+
+Follow these steps if you want explicit control or if `npm start` fails.
+
+### Step 1: Clone the repository
+
+```bash
+git clone https://github.com/FavourOgboi/OpsMemory.git
+cd OpsMemory
+```
+
+### Step 2: Create environment files
+
+```bash
+cp opsmemory-backend/.env.example opsmemory-backend/.env
+cp .env.example .env.local
+```
+
+Open `opsmemory-backend/.env` and configure at minimum:
+
+| Variable | Example | Required |
+|----------|---------|----------|
+| `OPENROUTER_API_KEY` | `sk-or-v1-...` | Yes |
+| `OPSMEMORY_DB_HOST` | `localhost` | Yes |
+| `OPSMEMORY_DB_PORT` | `5433` (Docker) or `5432` (local Postgres) | Yes |
+| `OPSMEMORY_DB_NAME` | `opsmemory` | Yes |
+| `OPSMEMORY_DB_USER` | `postgres` | Yes |
+| `OPSMEMORY_DB_PASSWORD` | `postgres` | Yes |
+| `SECRET_KEY` | random 32+ character string | Yes |
+| `JWT_SECRET` or app default | change in production | Recommended |
+| `APP_ENV` | `development` | Yes for local |
+| `BASE_URL` | `http://localhost:8000` | Yes |
+
+Frontend `.env.local` may leave `VITE_API_BASE_URL` empty in development; Vite proxies `/api` and `/webhook` to port 8000.
+
+### Step 3: Install frontend dependencies
+
+```bash
+npm install
+```
+
+### Step 4: Install backend dependencies
+
+```bash
 cd opsmemory-backend
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cd ..
+```
+
+### Step 5: Start PostgreSQL
+
+**Option A (recommended): Docker**
+
+```bash
+docker compose -f docker-compose.dev.yml up -d postgres
+```
+
+Wait until healthy:
+
+```bash
+docker compose -f docker-compose.dev.yml ps
+```
+
+**Option B: Existing PostgreSQL server**
+
+Create the database:
+
+```sql
+CREATE DATABASE opsmemory;
+```
+
+Set `OPSMEMORY_DB_PORT` and credentials in `opsmemory-backend/.env` to match your instance.
+
+### Step 6: Run migrations
+
+```bash
+cd opsmemory-backend
+source venv/bin/activate
 python scripts/migrate_all.py
 ```
 
-### 3. Ingest Yelp Dataset
+Optional patch for onboarding columns (if not already applied):
 
-Place Yelp JSON files in `opsmemory-backend/data/`, then:
+```bash
+PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d opsmemory \
+  -f migrations/007_onboarding_business_fields.sql
+```
+
+### Step 7: Seed demo catalog (optional)
+
+Requires a valid `OPENROUTER_API_KEY` (embeddings):
+
+```bash
+cd opsmemory-backend
+source venv/bin/activate
+python scripts/seed_bola_catalog.py
+```
+
+### Step 8: Ingest hackathon Yelp data (optional)
+
+Place Yelp JSON exports under `opsmemory-backend/data/`, then:
+
 ```bash
 python scripts/ingest_datasets.py
 ```
 
-### 4. Configure Environment
+This powers Review Intelligence and Recommendation Engine pages. It is not required for core WhatsApp and dashboard flows.
 
-Copy `.env.example` to `.env` and set your OpenRouter API key:
-```bash
-cp .env.example .env
-# Edit .env → set OPENROUTER_API_KEY=sk-or-...
-```
+### Step 9: Start the stack
 
-### 5. Run
+From the repository root:
 
 ```bash
-cd mission-control
-npm run dev
-# Frontend → http://localhost:8081
-# Backend  → http://localhost:8000
+npm start
 ```
+
+Verify:
+
+| URL | Expected |
+|-----|----------|
+| http://localhost:8000/health | `{"status":"ok",...}` |
+| http://localhost:8000/docs | OpenAPI UI |
+| http://localhost:5173 | Landing page |
+| http://localhost:5173/dashboard | Dashboard after sign-in |
+
+### Step 10: Create a business via onboarding
+
+1. Visit http://localhost:5173/sign-up
+2. Register name, email, password
+3. Complete all six onboarding steps
+4. On step 4, enter product lines (example: `Rice 50kg - 45000`) or upload a PDF catalog
+5. Finish and open the dashboard
+
+Send a test message through WhatsApp only after [Section 8](#8-whatsapp-webhooks-optional) is configured.
 
 ---
 
-## Architecture
+## 6. Configuration reference
 
-```
-┌──────────────────────────────────────────────┐
-│              Frontend (Vite + React)          │
-│  ┌──────────┐ ┌──────────────┐ ┌──────────┐  │
-│  │ Review   │ │ Recommend    │ │ Dashboard│  │
-│  │ Intel UI │ │ Engine Chat  │ │ & CRM    │  │
-│  └────┬─────┘ └──────┬───────┘ └────┬─────┘  │
-│       │              │              │        │
-├───────┼──────────────┼──────────────┼────────┤
-│       ▼              ▼              ▼        │
-│           FastAPI Backend (Port 8000)        │
-│  ┌──────────┐ ┌──────────────┐ ┌──────────┐  │
-│  │ /reviews │ │ /recommend   │ │ /api/*   │  │
-│  │ Router   │ │ Router       │ │ Routers  │  │
-│  └────┬─────┘ └──────┬───────┘ └────┬─────┘  │
-│       ▼              ▼              │        │
-│  ┌──────────────────────────┐       │        │
-│  │ LLM Client (OpenRouter)  │       │        │
-│  │ → GPT-4o-mini / Llama    │       │        │
-│  └──────────────────────────┘       │        │
-│       │              │              │        │
-│       ▼              ▼              ▼        │
-│  ┌──────────────────────────────────────┐    │
-│  │     PostgreSQL (opsmemory DB)        │    │
-│  │  external_users · external_items     │    │
-│  │  external_reviews · generated_reviews│    │
-│  │  recommendation_sessions · app_users │    │
-│  └──────────────────────────────────────┘    │
-└──────────────────────────────────────────────┘
-```
+### 6.1 Backend (`opsmemory-backend/.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `OPSMEMORY_DB_*` | PostgreSQL connection |
+| `OPENROUTER_API_KEY` | LLM, embeddings, transcription |
+| `OPENROUTER_BASE_URL` | Default `https://openrouter.ai/api/v1` |
+| `META_WHATSAPP_*` | Meta Cloud API (token, verify token, phone number id) |
+| `META_APP_SECRET` | Webhook HMAC verification (production) |
+| `TWILIO_*` | Twilio WhatsApp sandbox |
+| `WHATSAPP_PROVIDER` | `auto`, `meta`, or `twilio` |
+| `SMTP_*` | CEO morning digest email |
+| `BASE_URL` | Public URL for webhooks and links |
+| `APP_ENV` | `development` or `production` |
+
+Deprecated placeholders (leave empty): `SUPABASE_*`, `CLERK_*`.
+
+### 6.2 Frontend (`.env.local`)
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_BASE_URL` | Empty in dev (proxy). Set to backend URL in production builds. |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Only if re-enabling Clerk |
 
 ---
 
-## Task A: Review Intelligence
+## 7. Using the application
 
-**Goal:** Given a user persona + item, simulate an authentic review (star rating + text).
+### 7.1 Main URLs
 
-### How It Works
-1. **Profile-based mode** (`POST /reviews/simulate/profile`): Fetches user's real behavioral profile + 5 past reviews from the Yelp dataset, then generates a review matching their tone, style, and rating tendency.
-2. **Persona-based mode** (`POST /reviews/simulate/persona`): Takes a free-form persona object (avg_rating, tone, writing style, complaints, praises) — no DB lookup needed.
+| Page | Path |
+|------|------|
+| Landing | `/` |
+| Sign up | `/sign-up` |
+| Sign in | `/sign-in` |
+| Onboarding | `/onboarding` |
+| Dashboard | `/dashboard` |
+| Customers | `/dashboard/customers` |
+| Approvals | `/dashboard/approvals` |
+| Knowledge base | `/dashboard/knowledge` |
+| Review Intelligence (Task A) | `/dashboard/review-intelligence` |
+| Recommendations (Task B) | `/dashboard/recommendations` |
 
-### Key Design Decisions
-- **Style matching**: Up to 5 past reviews injected as few-shot context for the LLM to mirror vocabulary, sentence structure, and review length
-- **Behavioral anchoring**: Average rating tendency constrains the predicted star rating
-- **Nigerian Pidgin mode**: Activatable per-request — generates reviews in authentic Pidgin English
-- **Structured output**: JSON response format enforced via `response_format={"type": "json_object"}`
+### 7.2 Demo access (judges / quick review)
 
-### API Examples
+| Action | Location |
+|--------|----------|
+| Double-click the OpsMemory logo | Sign-in or sign-up page → dashboard without registration |
+| Triple-click the sidebar logo | Toggle demo mode |
+
+### 7.3 Background jobs (Africa/Lagos)
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| `morning_digest` | 07:00 daily | CEO email for connected businesses |
+| `agent_sweep` | Every 30 minutes | Proactive agent evaluation per customer |
+| `campaign_continuations` | Every 4 hours | Collections / Churn / Deal campaign steps |
+
+---
+
+## 8. WhatsApp webhooks (optional)
+
+Replace `{BASE_URL}` with your public HTTPS origin (from `npm run dev:tunnel` or production host).
+
+Replace `{BUSINESS_ID}` with your tenant UUID from the database or onboarding completion response.
+
+### 8.1 Meta WhatsApp Cloud API
+
+| Setting | Value |
+|---------|--------|
+| Callback URL | `{BASE_URL}/webhook/whatsapp/{BUSINESS_ID}` |
+| Verify token | Same as `META_WHATSAPP_VERIFY_TOKEN` in `.env` |
+| Method | GET verify, POST messages |
+
+### 8.2 Twilio sandbox
+
+| Setting | Value |
+|---------|--------|
+| When a message comes in | `{BASE_URL}/webhook/twilio/{BUSINESS_ID}` |
+| Method | HTTP POST |
+
+Use `/webhook/twilio/`, not `/webhook/whatsapp/`, for Twilio traffic.
+
+### 8.3 Verify Meta token
 
 ```bash
-# From real user profile (requires data ingested)
-curl -X POST http://localhost:8000/reviews/simulate/profile \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "...", "item_id": "...", "force_nigerian": false}'
-
-# From persona (no DB needed — works immediately)
-curl -X POST http://localhost:8000/reviews/simulate/persona \
-  -H "Content-Type: application/json" \
-  -d '{
-    "persona": {
-      "avg_rating": 4.2,
-      "tone": "enthusiastic",
-      "language_style": "casual",
-      "common_praises": ["great customer service", "fast delivery"],
-      "writing_personality": "Writes long positive reviews"
-    },
-    "item_name": "Mama Put Restaurant",
-    "item_category": "Nigerian Restaurant",
-    "nigerian_context": true
-  }'
+curl -s "https://graph.facebook.com/v25.0/${META_PHONE_NUMBER_ID}" \
+  -H "Authorization: Bearer ${META_WHATSAPP_TOKEN}"
 ```
 
 ---
 
-## Task B: Recommendation Engine
+## 9. Development commands
 
-**Goal:** Multi-turn conversational recommendations with cold-start handling and cross-domain switching.
+| Command | Description |
+|---------|-------------|
+| `npm run setup` | First-time install: env files, npm, venv, pip, Docker Postgres, migrations |
+| `npm start` | Start Postgres (Docker), migrate, backend, frontend |
+| `npm run dev` | Alias for `npm start` |
+| `npm run dev:tunnel` | Same as start plus Cloudflare quick tunnel |
+| `npm run dev:frontend` | Frontend only (port 5173) |
+| `npm run dev:backend` | Backend only (port 8000) |
+| `npm run db:up` | Start Postgres container |
+| `npm run db:down` | Stop Postgres container |
+| `npm run db:migrate` | Run `migrate_all.py` |
+| `npm run build` | Production frontend build |
+| `make start` | Same as `npm start` (Unix Makefile) |
 
-### How It Works
-1. **Start session** (`POST /recommend/start`): User describes what they want → agent either asks preference questions (cold-start) or directly recommends (if user profile exists)
-2. **Continue session** (`POST /recommend/continue`): Multi-turn refinement — agent updates preferences, re-ranks candidates, handles domain switches
+Flags for `node scripts/start.mjs`:
 
-### Key Design Decisions
-- **Cold-start protocol**: When no user profile exists, agent asks 2 targeted questions before recommending
-- **Cross-domain**: Detects when user mentions books/products vs restaurants and switches catalogs
-- **Candidate retrieval**: Top items by review count fetched from PostgreSQL, injected into LLM context
-- **Session persistence**: Full conversation history stored in `recommendation_sessions` table
-- **Preference tracking**: Gathered preferences (cuisine, price, location) merged across turns
+| Flag | Effect |
+|------|--------|
+| `--no-docker` | Do not start Docker; use existing Postgres |
+| `--skip-setup` | Skip auto setup when node_modules and venv exist |
+| `--tunnel` | Start cloudflared (same as `npm run dev:tunnel`) |
 
-### API Examples
+---
+
+## 10. Database and migrations
+
+### 10.1 Connection defaults (Docker)
+
+| Setting | Value |
+|---------|--------|
+| Host | `localhost` |
+| Port | `5433` |
+| Database | `opsmemory` |
+| User | `postgres` |
+| Password | `postgres` |
+
+### 10.2 Migration order (manual)
+
+If you do not use `migrate_all.py`, apply SQL files in order:
+
+1. `migrations/001_initial_schema.sql`
+2. `migrations/002_agent_campaigns.sql`
+3. `migrations/003_seed_data.sql` (optional demo)
+4. `migrations/004_knowledge_base.sql`
+5. `migrations/005_schema_updates.sql`
+6. `migrations/005_bola_agro_demo.sql` (optional)
+7. `migrations/006_sync_demo_dashboard.sql` (optional)
+8. `migrations/007_onboarding_business_fields.sql`
+
+Unified script (recommended):
 
 ```bash
-# Start a cold-start session
-curl -X POST http://localhost:8000/recommend/start \
-  -H "Content-Type: application/json" \
-  -d '{"message": "I want to find a good suya spot in Lagos", "source": "yelp"}'
-
-# Continue the conversation
-curl -X POST http://localhost:8000/recommend/continue \
-  -H "Content-Type: application/json" \
-  -d '{"session_id": "...", "message": "Something affordable, open late"}'
+cd opsmemory-backend && python scripts/migrate_all.py
 ```
 
----
-
-## Nigerian Context
-
-The system is contextualized for Nigerian users (bonus marks criteria):
-
-- **Pidgin English** review generation with authentic vocabulary (oga, abeg, na wa o, chop well)
-- Nigerian business context (Bola Agro catalog as sample data)
-- Lagos-specific delivery policies, pricing in Naira (₦)
-- Nigerian review tone patterns
-
----
-
-## Demo Mode
-
-For judges and team members to quickly access the full dashboard without creating an account:
-
-| Method | Where | How |
-|--------|-------|-----|
-| **Double-click logo** | Sign-in or Sign-up page | Double-click the OpsMemory logo → instant dashboard access |
-| **Triple-click logo** | Dashboard sidebar | Triple-click the OpsMemory logo → toggle demo mode on/off |
-
----
-
-## Deployment (Render)
-
-### PostgreSQL (Render)
-1. Create a **PostgreSQL** database on Render (free tier works)
-2. Copy the **Internal Database URL** from Render dashboard
-3. Set environment variables in your Render Web Service:
-
-```env
-OPSMEMORY_DB_NAME=<from render>
-OPSMEMORY_DB_USER=<from render>
-OPSMEMORY_DB_PASSWORD=<from render>
-OPSMEMORY_DB_HOST=<from render internal host>
-OPSMEMORY_DB_PORT=5432
-OPENROUTER_API_KEY=sk-or-...
-SECRET_KEY=<random 32+ char string>
-APP_ENV=production
-BASE_URL=https://your-app.onrender.com
-```
-
-### Backend (Render Web Service)
-- **Build command:** `cd opsmemory-backend && pip install -r requirements.txt`
-- **Start command:** `cd opsmemory-backend && uvicorn main:app --host 0.0.0.0 --port $PORT`
-- **After first deploy:** Run `python scripts/migrate_all.py` via Render Shell
-
-### Frontend (Render Static Site or same service)
-- **Build command:** `npm install && npm run build`
-- **Publish directory:** `dist`
-- Set `VITE_API_BASE_URL` to backend URL
-
----
-
-## Evaluation
-
-Run the built-in evaluation script:
+### 10.3 Evaluation (hackathon metrics)
 
 ```bash
 cd opsmemory-backend
-
-# Evaluate Task A (ROUGE-L + RMSE on held-out reviews)
 python scripts/evaluate.py --task a --samples 15
-
-# Evaluate Task B (Hit Rate@10 on recommendation sessions)
 python scripts/evaluate.py --task b --samples 10
-
-# Both
-python scripts/evaluate.py --task all --samples 10
 ```
 
-Metrics computed:
-- **Task A:** ROUGE-L F1, Rating RMSE, per-sample breakdowns
-- **Task B:** Hit Rate@10, cold-start vs warm-start comparison
+---
+
+## 11. Deployment
+
+### 11.1 Docker Compose (full stack)
+
+Production-oriented compose (builds images, no hot reload):
+
+```bash
+docker compose up --build
+```
+
+Maps frontend preview to port 4173 and backend to 8000. Provide `opsmemory-backend/.env` before starting.
+
+### 11.2 Render / VPS
+
+| Layer | Suggestion |
+|-------|------------|
+| Frontend | Vercel, Cloudflare Pages, or static hosting with `VITE_API_BASE_URL` |
+| Backend | Render, Fly.io, or systemd on a VPS |
+| Database | Managed PostgreSQL with pgvector if available |
+| Webhooks | Named Cloudflare Tunnel or fixed TLS domain |
+
+Set `APP_ENV=production`, strong `SECRET_KEY` and `JWT_SECRET`, and restrict CORS in `main.py` to your frontend origin.
+
+### 11.3 systemd (Linux server)
+
+Unit files are provided under `deploy/systemd/`:
+
+```bash
+sudo cp deploy/systemd/opsmemory-backend.service /etc/systemd/system/
+sudo cp deploy/systemd/opsmemory-cloudflared.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable opsmemory-backend opsmemory-cloudflared
+sudo systemctl start opsmemory-backend
+```
 
 ---
 
-## Implementation Status
+## 12. Troubleshooting
 
-### ✅ Fully Implemented
-| Feature | Files |
-|---------|-------|
-| Task A: Review simulation (profile + persona modes) | `review_engine.py`, `reviews.py` |
-| Task A: Review Intelligence UI (user select, generate, view) | `ReviewIntelligence.tsx` |
-| Task B: Multi-turn recommendation sessions | `recommendation_engine.py`, `recommendations.py` |
-| Task B: Recommendation chat UI with cold-start | `RecommendationEngine.tsx` |
-| Cross-domain detection (Yelp ↔ Amazon phrase triggers) | `recommendation_engine.py` |
-| Cold-start protocol (2-question warmup) | `recommendation_engine.py` |
-| Nigerian Pidgin review generation | `review_engine.py` |
-| Yelp dataset ingestion (business, user, review) | `ingest_datasets.py` |
-| Evaluation script (ROUGE-L, RMSE, Hit Rate) | `evaluate.py` |
-| Local auth (register, login, JWT) | `local_auth.py` |
-| 6-step business onboarding flow | `OnboardingShell.tsx`, Steps 1–6 |
-| First-time dashboard tour (7 steps) | `TourOverlay.tsx`, `useTour.ts` |
-| Demo mode (double-click / triple-click) | `Sidebar.tsx`, sign-in/sign-up pages |
-| PostgreSQL migrations (20+ tables + indexes) | `migrate_all.py` |
-| Full dashboard (CRM, Analytics, Approvals, Event Stream) | `src/routes/dashboard/*` |
+### PostgreSQL connection refused
 
-### ⚠️ Needs Testing / Perfecting Before Submission (May 24)
-| Item | What's Needed | Priority |
-|------|---------------|----------|
-| **Yelp data ingestion** | Run `ingest_datasets.py` with OpenRouter key to populate DB + build behavior profiles | 🔴 Critical |
-| **OpenRouter API key** | Get key from openrouter.ai/keys — without it, Task A + B LLM calls fail | 🔴 Critical |
-| **Evaluation metrics** | Run `evaluate.py` after ingestion to get ROUGE/RMSE/Hit Rate numbers for the paper | 🔴 Critical |
-| **Solution Paper** | Write 4–8 page paper (approach, architecture, experiments, ablation studies) | 🔴 Critical |
-| **Containerization** | Test Dockerfile end-to-end, ensure `docker compose up` works for judges | 🟡 High |
-| **Render deployment** | Deploy and verify all API endpoints work in production | 🟡 High |
-| **Prompt tuning** | Test review quality, adjust temperature/prompt for higher ROUGE scores | 🟡 High |
-| **Cross-domain test** | Verify domain switching actually works with populated data | 🟡 Medium |
+Confirm Docker is running and port 5433 is free:
 
-### 🔮 Future Improvements (Post-Hackathon)
-| Feature | Description |
-|---------|-------------|
-| pgvector semantic search | Vector similarity for candidate retrieval instead of review count sorting |
-| BERTScore evaluation | Add BERTScore alongside ROUGE for richer text quality metrics |
-| Fine-tuned model | Train a LoRA adapter on Yelp reviews for better style mimicry |
-| WhatsApp live integration | Connect Twilio/Meta API for real customer conversations |
-| Multi-agent orchestration | Full 6-agent system (Memory, Finance, Ops, Sales, Campaign, Escalation) |
-| Voice note transcription | Process WhatsApp voice notes via Whisper API |
-| Payment verification | Automated bank transfer matching |
-| Real-time analytics | WebSocket-powered live dashboard updates |
+```bash
+docker compose -f docker-compose.dev.yml ps
+npm run db:up
+```
+
+Align `OPSMEMORY_DB_PORT` in `.env` with the port you use.
+
+### `OPENROUTER_API_KEY` errors
+
+Onboarding catalog indexing and WhatsApp replies require embeddings. Add a valid key and restart `npm start`.
+
+### Dashboard empty after sign-in
+
+Check http://localhost:8000/health. Open browser devtools → Network → confirm `/api/customers/` returns 200.
+
+### Meta replies appear on Twilio
+
+Refresh `META_WHATSAPP_TOKEN`. Ensure webhook paths match the provider (Meta vs Twilio).
+
+### Migrations fail on `vector` extension
+
+Safe on dev: embeddings use JSONB cosine fallback in `rag.py`. Install pgvector image (`docker-compose.dev.yml` already uses `pgvector/pgvector`).
+
+### Port already in use
+
+| Port | Process |
+|------|---------|
+| 5173 | Vite |
+| 8000 | Uvicorn |
+| 5433 | Postgres Docker |
+
+Stop conflicting services or change ports in `vite` and uvicorn arguments.
 
 ---
 
-## Testing Guide
+## 13. Repository layout
 
-### Test Task A (Review Intelligence)
-
-1. **Via UI:** Go to Dashboard → Review Intelligence → Select a user + item → Click "Generate"
-2. **Via API (persona mode — no data needed):**
-   ```bash
-   curl -X POST http://localhost:8000/reviews/simulate/persona \
-     -H "Content-Type: application/json" \
-     -d '{
-       "persona": {"avg_rating": 4.0, "tone": "positive", "language_style": "casual"},
-       "item_name": "Test Restaurant",
-       "item_category": "Restaurant",
-       "nigerian_context": true
-     }'
-   ```
-3. **Via API (profile mode — requires ingested data):**
-   ```bash
-   curl -X POST http://localhost:8000/reviews/simulate/profile \
-     -H "Content-Type: application/json" \
-     -d '{"user_id": "<from DB>", "item_id": "<from DB>"}'
-   ```
-
-### Test Task B (Recommendations)
-
-1. **Via UI:** Go to Dashboard → Recommendations → Type a message like "I want spicy food"
-2. **Via API:**
-   ```bash
-   # Start
-   curl -X POST http://localhost:8000/recommend/start \
-     -H "Content-Type: application/json" \
-     -d '{"message": "recommend a good restaurant", "source": "yelp"}'
-
-   # Continue (use session_id from above)
-   curl -X POST http://localhost:8000/recommend/continue \
-     -H "Content-Type: application/json" \
-     -d '{"session_id": "...", "message": "something affordable and spicy"}'
-   ```
-
-### Test Cold-Start
-- Start a session WITHOUT `user_id` — the agent should ask preference questions first
-- After answering, it should recommend
-
-### Test Nigerian Pidgin
-- Set `force_nigerian: true` in Task A requests
-- The review should contain Pidgin phrases (oga, abeg, e good sha, etc.)
+```text
+OpsMemory/
+├── src/                          # TanStack Start frontend
+│   ├── routes/                   # File-based routes
+│   ├── components/               # Dashboard, onboarding, knowledge UI
+│   ├── store/                    # Zustand (auth, events, approvals)
+│   └── lib/                      # api.ts, onboarding-api.ts
+├── opsmemory-backend/
+│   ├── main.py                   # FastAPI entry
+│   ├── app/
+│   │   ├── routers/              # API, webhooks, auth, onboarding
+│   │   ├── services/             # agents, extraction, RAG, orchestrator
+│   │   └── jobs/                 # Scheduler
+│   ├── migrations/               # SQL schema and seeds
+│   └── scripts/                  # migrate_all, ingest, evaluate, seed
+├── scripts/
+│   ├── setup.mjs                 # First-time setup
+│   └── start.mjs                 # One-command dev stack
+├── docker-compose.dev.yml        # Postgres only for local dev
+├── docker-compose.yml            # Full stack build
+├── package.json                  # npm start, setup, dev
+├── vite.config.ts                # Proxy /api → :8000
+├── wrangler.jsonc                # Cloudflare Workers entry
+└── deploy/systemd/               # Production units
+```
 
 ---
 
-## Tech Stack
+## 14. Security
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Vite 7, React 19, TanStack Router, Framer Motion, Zustand |
-| Backend | FastAPI, Uvicorn, APScheduler |
-| Database | PostgreSQL 18 (local) / Render PostgreSQL (production) |
-| LLM | OpenRouter (GPT-4o-mini, Llama 3.1) |
-| Auth | bcrypt + PyJWT (local auth, no third-party) |
-| Evaluation | rouge-score, psycopg2 |
+**Never commit secrets.** These paths are gitignored:
+
+| Path | Contents |
+|------|----------|
+| `opsmemory-backend/.env` | API keys, DB passwords |
+| `.env.local` | Frontend overrides |
+| `tunnel-url.txt` | Ephemeral tunnel URL |
+
+Use `.env.example` files as templates only.
+
+Before sharing the repository or opening a pull request:
+
+```bash
+git ls-files | grep -E '\.env$|\.env\.'
+```
+
+Rotate any key that was exposed in chat, screenshots, or old commits.
+
+Production checklist:
+
+1. Set `APP_ENV=production`
+2. Set `META_APP_SECRET` for webhook HMAC
+3. Use strong `SECRET_KEY` and `JWT_SECRET`
+4. Restrict CORS to your frontend domain
+5. Run the backend as a non-root user with `chmod 600` on `.env`
 
 ---
 
-## Team
+## License
 
-Built for the **DSN × BCT LLM Agent Challenge** (May 2026).
+Proprietary. All rights reserved.
 
-**Deadline:** May 24, 2026 — End of Day.
+## Acknowledgement
+
+Developed for the DSN × BCT LLM Agent Challenge (2026). Core product focus: WhatsApp operational intelligence for SMEs. Hackathon modules: user modeling (Task A) and recommendation (Task B) over external review datasets.

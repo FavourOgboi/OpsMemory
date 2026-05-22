@@ -259,20 +259,20 @@ async def generate_customer_response(
     )
     mentions_products = any(k in lower_inbound for k in product_keywords)
 
-    # ── RAG RETRIEVAL (catalog/FAQ — not for balance-only questions) ──
+    # ── RAG RETRIEVAL (onboarding knowledge + catalog/FAQ) ──
     knowledge_context = ""
-    if not is_balance_question and (
-        intent in ("price_inquiry", "order_request")
-        or (intent == "general_inquiry" and mentions_products)
-        or mentions_products
-    ):
-        search_query = extracted_data.product_mentioned or last_inbound[:120]
-        if search_query:
+    if not is_balance_question:
+        search_query = (
+            extracted_data.product_mentioned
+            or last_inbound[:200]
+            or "products prices services catalog"
+        )
+        if search_query and len(search_query.strip()) >= 3:
             relevant_chunks = await retrieve_relevant_knowledge(
                 business_id=business_id,
                 query=search_query,
-                top_k=5,
-                threshold=0.72,
+                top_k=6,
+                threshold=0.62,
             )
             knowledge_context = format_knowledge_for_prompt(relevant_chunks)
 

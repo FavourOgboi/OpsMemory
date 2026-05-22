@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { useAuth } from '@/store/useAuth';
 import { Hero } from '@/components/landing/Hero';
 import { HowItWorks } from '@/components/landing/HowItWorks';
 import { AgentGrid } from '@/components/landing/AgentGrid';
@@ -19,6 +21,16 @@ export const Route = createFileRoute('/')({
 });
 
 function Landing() {
+  const navigate = useNavigate();
+  const { isAuthenticated, onboardingCompleted, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated && !onboardingCompleted) {
+      navigate({ to: '/onboarding' });
+    }
+  }, [isAuthenticated, onboardingCompleted, isLoading, navigate]);
+
   return (
     <div className="relative min-h-screen">
       <header className="fixed inset-x-0 top-0 z-50 border-b border-border/50 bg-background/60 backdrop-blur-xl">
@@ -42,7 +54,7 @@ function Landing() {
               to="/sign-up"
               className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-glow"
             >
-              Get Early Access
+              Set up your business
             </Link>
           </div>
         </div>

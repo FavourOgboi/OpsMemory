@@ -1,0 +1,22 @@
+# Development database only. Application processes run on the host via `npm start`.
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: opsmemory-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: opsmemory
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - opsmemory_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d opsmemory"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+
+volumes:
+  opsmemory_pgdata:

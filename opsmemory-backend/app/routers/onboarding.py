@@ -11,8 +11,12 @@ from app.auth import verify_clerk_token, get_current_user, require_ceo
 from app.database import supabase
 from app.models.schemas import RegisterBusinessRequest, ConnectWhatsAppRequest, InviteTeamMemberRequest, UpdateBusinessMemoryRequest
 from app.config import settings
+from app.services.onboarding_knowledge import sync_onboarding_to_knowledge
 import uuid
 import secrets
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
@@ -149,65 +153,134 @@ async def update_business_memory(body: UpdateBusinessMemoryRequest, user: dict =
 
 # ── New onboarding endpoints for 6-step flow ─────────────────────────────────
 
-@router.post("/complete")
-async def complete_onboarding(body: dict, user: dict = Depends(get_current_user)):
-    """Complete onboarding — creates business if needed, marks complete."""
-    user_id = user["user_id"]
 
-    # Check if business already exists
-    existing = supabase.table("businesses") \
-        .select("id") \
-        .eq("owner_user_id", user_id) \
-        .maybeSingle() \
+def _business_fields_from_body(body: dict, *, step: int, completed: bool = False) -> dict:
+    """Map onboarding form JSON to businesses table columns."""
+    return {
+        "name": body.get("business_name") or "My Business",
+        "type": body.get("business_type") or "services",
+        "website_url": body.get("website_url"),
+        "instagram_handle": body.get("instagram_handle"),
+        "other_link": body.get("other_link"),
+        "whatsapp_number": body.get("whatsapp_number"),
+        "catalog_url": body.get("catalog_url"),
+        "business_description": body.get("business_description"),
+        "products_text": body.get("products_text"),
+        "deal_approval_threshold": body.get("deal_threshold", 100000),
+        "auto_reply_enabled": body.get("auto_reply_enabled", True),
+        "city": body.get("city"),
+        "agent_languages": body.get("agent_languages") or ["english", "pidgin"],
+        "onboarding_step": step,
+        "onboarding_completed": completed,
+    }
+
+
+def _ensure_ceo_membership(biz_id: str, user: dict, owner_name: str) -> None:
+    """Link app user to business as CEO (local auth uses app_user_id)."""
+    uid = user["user_id"]
+    existing = (
+        supabase.table("business_users")
+        .select("id")
+        .eq("business_id", biz_id)
+        .eq("app_user_id", uid)
+        .maybeSingle()
         .execute()
+    )
+    if existing.data:
+        return
+    row = {
+        "business_id": biz_id,
+        "app_user_id": uid,
+        "clerk_user_id": uid,
+        "email": user.get("email", ""),
+        "name": owner_name or "Owner",
+        "role": "ceo",
+    }
+    try:
+        supabase.table("business_users").insert(row).execute()
+    except Exception as exc:
+        logger.warning("CEO membership insert: %s", exc)
+
+
+async def _upsert_business_from_onboarding(
+    user: dict,
+    body: dict,
+    *,
+    step: int,
+    completed: bool = False,
+) -> str:
+    user_id = user["user_id"]
+    fields = _business_fields_from_body(body, step=step, completed=completed)
+
+    existing = (
+        supabase.table("businesses")
+        .select("id")
+        .eq("owner_user_id", user_id)
+        .maybeSingle()
+        .execute()
+    )
 
     if existing.data:
-        # Update existing business
-        supabase.table("businesses").update({
-            "name": body.get("business_name", "My Business"),
-            "type": body.get("business_type", "services"),
-            "website_url": body.get("website_url"),
-            "instagram_handle": body.get("instagram_handle"),
-            "whatsapp_number": body.get("whatsapp_number"),
-            "catalog_url": body.get("catalog_url"),
-            "deal_approval_threshold": body.get("deal_threshold", 100000),
-            "auto_reply_enabled": body.get("auto_reply_enabled", True),
-            "city": body.get("city"),
-            "onboarding_step": 6,
-            "onboarding_completed": True,
-        }).eq("id", str(existing.data["id"])).execute()
         biz_id = str(existing.data["id"])
+        supabase.table("businesses").update(fields).eq("id", biz_id).execute()
     else:
-        # Create new business
         pairing_code = secrets.token_hex(4).upper()
-        result = supabase.table("businesses").insert({
-            "name": body.get("business_name", "My Business"),
-            "type": body.get("business_type", "services"),
+        insert_row = {
+            **fields,
             "owner_user_id": user_id,
             "owner_email": user.get("email", ""),
-            "website_url": body.get("website_url"),
-            "instagram_handle": body.get("instagram_handle"),
-            "whatsapp_number": body.get("whatsapp_number"),
-            "catalog_url": body.get("catalog_url"),
-            "deal_approval_threshold": body.get("deal_threshold", 100000),
-            "auto_reply_enabled": body.get("auto_reply_enabled", True),
-            "city": body.get("city"),
             "pairing_code": pairing_code,
-            "onboarding_step": 6,
-            "onboarding_completed": True,
-        }).execute()
+        }
+        result = supabase.table("businesses").insert(insert_row).execute()
         biz_id = str(result.data[0]["id"])
 
-        # Create CEO business_user
-        supabase.table("business_users").insert({
-            "business_id": biz_id,
-            "clerk_user_id": user_id,
-            "email": user.get("email", ""),
-            "name": body.get("owner_name", "Owner"),
-            "role": "ceo",
-        }).execute()
+    _ensure_ceo_membership(biz_id, user, body.get("owner_name", "Owner"))
+    return biz_id
 
-    # Mark user preferences as onboarding completed
+
+@router.post("/save-progress")
+async def save_onboarding_progress(body: dict, user: dict = Depends(get_current_user)):
+    """
+    Persist onboarding form data as the owner moves through steps.
+    Step 4+ also syncs catalog text into knowledge_base for WhatsApp RAG.
+    """
+    step = int(body.get("step") or 1)
+    biz_id = await _upsert_business_from_onboarding(user, body, step=step, completed=False)
+
+    knowledge_synced = False
+    if step >= 4 or body.get("products_text") or body.get("business_description"):
+        try:
+            await sync_onboarding_to_knowledge(biz_id, body)
+            knowledge_synced = True
+        except Exception as exc:
+            logger.error("Onboarding knowledge sync failed: %s", exc)
+
+    return {
+        "business_id": biz_id,
+        "step": step,
+        "knowledge_synced": knowledge_synced,
+        "message": "Progress saved",
+    }
+
+
+@router.post("/complete")
+async def complete_onboarding(body: dict, user: dict = Depends(get_current_user)):
+    """Complete onboarding — persist business + index knowledge for WhatsApp."""
+    user_id = user["user_id"]
+    biz_id = await _upsert_business_from_onboarding(
+        user, body, step=6, completed=True
+    )
+
+    knowledge_counts = {}
+    try:
+        knowledge_counts = await sync_onboarding_to_knowledge(biz_id, body)
+    except Exception as exc:
+        logger.error("Final onboarding knowledge sync failed: %s", exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Business saved but knowledge indexing failed: {exc}",
+        ) from exc
+
     try:
         supabase.table("user_preferences").update({
             "onboarding_completed": True,
@@ -215,7 +288,11 @@ async def complete_onboarding(body: dict, user: dict = Depends(get_current_user)
     except Exception:
         pass
 
-    return {"business_id": biz_id, "message": "Onboarding completed"}
+    return {
+        "business_id": biz_id,
+        "message": "Onboarding completed",
+        "knowledge_indexed": knowledge_counts,
+    }
 
 
 @router.post("/connect-whatsapp-simple")

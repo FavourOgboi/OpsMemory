@@ -18,6 +18,8 @@ interface OnboardingState {
   // Step 4
   catalogUrl: string;
   catalogUploaded: boolean;
+  businessDescription: string;
+  productsText: string;
   // Step 5
   dealThreshold: number;
   autoReplyEnabled: boolean;
@@ -45,6 +47,8 @@ export const useOnboarding = create<OnboardingState>()(
       whatsappConnected: false,
       catalogUrl: '',
       catalogUploaded: false,
+      businessDescription: '',
+      productsText: '',
       dealThreshold: 100000,
       autoReplyEnabled: true,
       agentLanguages: ['english', 'pidgin', 'yoruba', 'igbo'],
@@ -66,6 +70,8 @@ export const useOnboarding = create<OnboardingState>()(
           whatsappConnected: false,
           catalogUrl: '',
           catalogUploaded: false,
+          businessDescription: '',
+          productsText: '',
           dealThreshold: 100000,
           autoReplyEnabled: true,
           agentLanguages: ['english', 'pidgin', 'yoruba', 'igbo'],

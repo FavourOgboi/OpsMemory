@@ -70,6 +70,8 @@ MIGRATIONS = [
         business_hours JSONB DEFAULT '{}',
         agent_language TEXT DEFAULT 'auto',
         business_description TEXT,
+        products_text TEXT,
+        other_link TEXT,
         website TEXT,
         instagram_url TEXT,
         facebook_url TEXT,

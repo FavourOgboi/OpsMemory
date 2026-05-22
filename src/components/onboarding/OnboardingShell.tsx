@@ -3,6 +3,7 @@ import { useNavigate, Link } from '@tanstack/react-router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOnboarding } from '@/store/useOnboarding';
 import { useAuth } from '@/store/useAuth';
+import { saveOnboardingProgress, completeOnboarding } from '@/lib/onboarding-api';
 import { Step1Identity } from './Step1Identity';
 import { Step2Presence } from './Step2Presence';
 import { Step3WhatsApp } from './Step3WhatsApp';
@@ -17,12 +18,24 @@ export function OnboardingShell() {
   const { currentStep, nextStep, prevStep, setStep } = useOnboarding();
   const { setOnboardingCompleted } = useAuth();
   const [direction, setDirection] = useState(1);
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const StepComponent = STEPS[currentStep - 1];
 
-  const handleNext = () => {
-    setDirection(1);
-    nextStep();
+  const handleNext = async () => {
+    setSaveError('');
+    setSaving(true);
+    try {
+      const state = useOnboarding.getState();
+      await saveOnboardingProgress(state as Record<string, unknown>, currentStep);
+      setDirection(1);
+      nextStep();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save to database');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleBack = () => {
@@ -35,37 +48,20 @@ export function OnboardingShell() {
   };
 
   const handleComplete = async () => {
+    setSaveError('');
+    setSaving(true);
     try {
-      const token = localStorage.getItem('opsmemory-token');
       const state = useOnboarding.getState();
-      await fetch('/api/onboarding/complete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          business_name: state.businessName,
-          owner_name: state.ownerName,
-          business_type: state.businessType,
-          city: state.city,
-          website_url: state.websiteUrl || null,
-          instagram_handle: state.instagramHandle || null,
-          other_link: state.otherLink || null,
-          whatsapp_number: state.whatsappNumber || null,
-          catalog_url: state.catalogUrl || null,
-          deal_threshold: state.dealThreshold,
-          auto_reply_enabled: state.autoReplyEnabled,
-          agent_languages: state.agentLanguages,
-        }),
-      });
-    } catch {
-      // Continue even if API fails
+      await completeOnboarding(state as Record<string, unknown>);
+      setOnboardingCompleted(true);
+      localStorage.setItem('opsmemory_tour_completed', 'false');
+      useOnboarding.getState().reset();
+      navigate({ to: '/dashboard' });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save business setup');
+    } finally {
+      setSaving(false);
     }
-    setOnboardingCompleted(true);
-    localStorage.setItem('opsmemory_tour_completed', 'false');
-    useOnboarding.getState().reset();
-    navigate({ to: '/dashboard' });
   };
 
   return (
@@ -106,6 +102,14 @@ export function OnboardingShell() {
         ))}
       </div>
 
+      {saveError && (
+        <div className="mx-auto max-w-lg px-6">
+          <p className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-400">
+            {saveError}
+          </p>
+        </div>
+      )}
+
       {/* Step content */}
       <div className="flex flex-1 items-start justify-center overflow-y-auto px-6 pb-24">
         <div className="w-full max-w-lg">
@@ -137,9 +141,10 @@ export function OnboardingShell() {
             </button>
             <button
               onClick={handleNext}
-              className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-[0.97]"
+              disabled={saving}
+              className="rounded-xl bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-50"
             >
-              Continue →
+              {saving ? 'Saving…' : 'Continue →'}
             </button>
           </div>
         </div>
@@ -150,9 +155,10 @@ export function OnboardingShell() {
           <div className="mx-auto flex max-w-lg items-center justify-center">
             <button
               onClick={handleComplete}
-              className="rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-[0.97]"
+              disabled={saving}
+              className="rounded-xl bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-lg transition-all hover:opacity-90 active:scale-[0.97] disabled:opacity-50"
             >
-              Go to Dashboard →
+              {saving ? 'Indexing for WhatsApp…' : 'Go to Dashboard →'}
             </button>
           </div>
         </div>
