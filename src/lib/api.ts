@@ -8,10 +8,8 @@
  * - Standardizes error handling
  */
 
-/** Prefer same-origin proxy in dev; fall back to explicit host for prod. */
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ||
-  (import.meta.env.DEV ? "" : "http://localhost:8000");
+/** Same-origin /api in dev (Vite proxy) and on Vercel (vercel.json rewrites). Override with VITE_API_BASE_URL. */
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
