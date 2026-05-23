@@ -1,16 +1,25 @@
 [Unit]
-Description=OpsMemory Cloudflare tunnel (webhooks)
+Description=OpsMemory Cloudflare tunnel (public HTTPS for WhatsApp webhooks)
+Documentation=https://github.com/FavourOgboi/OpsMemory
 After=network-online.target opsmemory-backend.service
-Wants=network-online.target opsmemory-backend.service
+Wants=network-online.target
+Requires=opsmemory-backend.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=root
-ExecStart=/root/OpsMemory/opsmemory-backend/scripts/cloudflared-tunnel.sh
+Environment=BACKEND_URL=http://127.0.0.1:8000
+Environment=ENV_FILE=/root/OpsMemory/opsmemory-backend/.env
+Environment=URL_FILE=/root/OpsMemory/tunnel-url.txt
+Environment=LOG_FILE=/var/log/opsmemory-cloudflared.log
+ExecStart=/bin/bash /root/OpsMemory/opsmemory-backend/scripts/cloudflared-tunnel.sh
 Restart=always
 RestartSec=10
+TimeoutStopSec=30
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=opsmemory-cloudflared
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=multi-user.target opsmemory.target

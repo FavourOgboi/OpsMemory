@@ -25,7 +25,13 @@ write_url() {
 
 echo "$(date -Is) starting cloudflared -> $BACKEND_URL" >> "$LOG_FILE"
 
-exec /usr/local/bin/cloudflared tunnel --url "$BACKEND_URL" 2>&1 | tee -a "$LOG_FILE" | while IFS= read -r line; do
+CLOUDFLARED_BIN="${CLOUDFLARED_BIN:-$(command -v cloudflared || echo /usr/local/bin/cloudflared)}"
+if [[ ! -x "$CLOUDFLARED_BIN" ]]; then
+  echo "cloudflared not found" >&2
+  exit 1
+fi
+
+exec "$CLOUDFLARED_BIN" tunnel --url "$BACKEND_URL" 2>&1 | tee -a "$LOG_FILE" | while IFS= read -r line; do
   if [[ "$line" =~ https://[a-z0-9-]+\.trycloudflare\.com ]]; then
     url="$(echo "$line" | grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1)"
     if [[ -n "$url" && "$(cat "$URL_FILE" 2>/dev/null || true)" != "$url" ]]; then

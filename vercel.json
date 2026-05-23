@@ -6,11 +6,11 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://opsmemory-backend.onrender.com/api/:path*"
+      "destination": "https://organizing-finish-frank-incomplete.trycloudflare.com/api/:path*"
     },
     {
       "source": "/webhook/:path*",
-      "destination": "https://opsmemory-backend.onrender.com/webhook/:path*"
+      "destination": "https://organizing-finish-frank-incomplete.trycloudflare.com/webhook/:path*"
     }
   ]
 }
